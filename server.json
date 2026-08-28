@@ -12,31 +12,11 @@
   "packages": [
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://ghcr.io",
       "identifier": "ghcr.io/tastytrade/tastytrade-mcp:1.0.0",
-      "version": "1.0.0",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
       },
-      "runtimeArguments": [
-        {
-          "type": "positional",
-          "value": "run",
-          "valueHint": "run"
-        },
-        {
-          "type": "positional",
-          "value": "-i",
-          "valueHint": "-i",
-          "description": "Required. This is a stdio MCP server; without -i Docker leaves stdin detached, the transport reads EOF immediately, and the container exits with no output."
-        },
-        {
-          "type": "positional",
-          "value": "--rm",
-          "valueHint": "--rm"
-        }
-      ],
       "environmentVariables": [
         {
           "name": "TASTYTRADE_API_URL",
@@ -147,8 +127,8 @@
       "transport": "stdio",
       "runtime": "node >=22",
       "toolSurface": {
-        "tools": 86,
-        "readOnly": 72,
+        "tools": 84,
+        "readOnly": 70,
         "write": 2,
         "destructive": 12,
         "note": "Every destructive tool requires a single-use confirmation token issued by its matching dry_run_* tool, valid for 60 seconds and bound to a hash of the submitted arguments."

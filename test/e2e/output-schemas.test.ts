@@ -31,7 +31,7 @@
  * advertised a status enum missing the status a SUCCESSFUL cancel returns);
  * `format` (the SDK's ajv runs `validateFormats: true`, so a `format: "date"` on a
  * timestamped field is enforced too, section 6e); `minimum`/`maximum`, simply
- * banned; `required` (section 7, live on 136 blocks across 93 tools and reaching
+ * banned; `required` (section 7, live on 129 blocks across 77 of the 84 tools, reaching
  * the live order POST); and `additionalProperties: false`, set only on a wrapper we
  * build, never on a shape the broker authors (section 9).
  *
@@ -307,7 +307,6 @@ const FIXTURE_ARGS: Record<string, Record<string, unknown>> = {
   tastytrade_get_market_metrics: { symbols: ["AAPL"] },
   tastytrade_get_option_chain: { symbol: "AAPL" },
   tastytrade_get_option_chain_compact: { symbol: "AAPL" },
-  tastytrade_get_option_chain_full: { symbol: "AAPL" },
   tastytrade_get_option_chain_nested: { symbol: "AAPL" },
   tastytrade_get_orders: { account_number: ACCT },
   tastytrade_get_quote: { symbols: ["AAPL"], instrument_type: "Equity" },
@@ -518,7 +517,6 @@ const NUMERIC_BY_DESIGN: Record<string, string> = {
   "tastytrade_get_future_products.items[].sub-tick": "fixture",
   "tastytrade_get_future_product.sub-tick": "fixture",
   "tastytrade_get_option_chain.items[].shares-per-contract": "fixture",
-  "tastytrade_get_option_chain_full.items[].shares-per-contract": "fixture",
   "tastytrade_get_option_chain_compact.items[].shares-per-contract": "fixture",
   "tastytrade_get_option_chain_nested.items[].shares-per-contract": "fixture",
   "tastytrade_get_equity_option.shares-per-contract": "fixture",
@@ -909,7 +907,7 @@ describe("the offline blind spot is inventoried and does not grow", () => {
     await harness.close();
   });
 
-  it("covers all 86 tools between the fixture corpus and the spec", () => {
+  it("covers all 84 tools between the fixture corpus and the spec", () => {
     const blind = allTools
       .filter((t) => !RECORDED.includes(t))
       .filter((t) => {
@@ -950,7 +948,7 @@ describe("the offline blind spot is inventoried and does not grow", () => {
 
   it("names the fixture-backed tools so the corpus cannot silently shrink", () => {
     expect(RECORDED.filter((t) => allTools.includes(t))).toEqual(RECORDED);
-    expect(RECORDED).toHaveLength(22);
+    expect(RECORDED).toHaveLength(21);
   });
 });
 
@@ -1876,7 +1874,7 @@ describe("the money path keeps a live order's confirmation", () => {
 // The fifth way a successful response gets rejected, and the only one that is not a
 // keyword: declaring an outputSchema is itself the constraint. The reference client
 // reads the spec as a MUST and throws `-32600 … did not return structured content`
-// when it is absent. All 93 tools declare one.
+// when it is absent. All 84 tools declare one.
 //
 // A dispatcher that skips a null payload therefore returns a spec-violating success
 // for every tool whose payload comes back empty. Four are reachable on documented or

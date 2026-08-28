@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * `tastytrade-mcp-doctor` — the operator preflight command.
+ * The operator preflight command, run as `npm run doctor` or
+ * `node dist/doctor.js`.
  *
  * When the credentials are wrong, this server fails the same way on every tool
  * call: `auth_failed`, with nothing saying which of the four things is broken.
@@ -2555,10 +2556,10 @@ function jsonTruncation(tally: BoundedTally): Record<string, number> {
 // CLI
 // ---------------------------------------------------------------------------
 
-export const USAGE = `tastytrade-mcp-doctor — preflight the tastytrade MCP server's configuration
+export const USAGE = `Preflight the tastytrade MCP server's configuration
 
 Usage:
-  tastytrade-mcp-doctor [doctor] [--json] [${SHOW_ACCOUNTS_FLAG}] [--help]
+  node dist/doctor.js [doctor] [--json] [${SHOW_ACCOUNTS_FLAG}] [--help]
 
 Options:
   --json             Emit one JSON object instead of the human report.
@@ -2637,7 +2638,7 @@ export async function main(
 ): Promise<number> {
   const options = parseArgs(argv);
   if (options.error) {
-    err(`tastytrade-mcp-doctor: ${options.error}\n\n${USAGE}`);
+    err(`doctor: ${options.error}\n\n${USAGE}`);
     return EXIT_USAGE;
   }
   if (options.help) {
@@ -2654,10 +2655,11 @@ export async function main(
 /**
  * True when this module is the process entry point.
  *
- * `process.argv[1]` is the path that was executed, which for an installed `bin`
- * is a symlink in `node_modules/.bin/`, while `import.meta.url` is always the
- * real file. Comparing them raw makes an npm-installed doctor silently do
- * nothing, so both sides are resolved through realpath first.
+ * `process.argv[1]` is the path that was executed, which may be a symlink — a
+ * link an operator puts on PATH, or one a container image layer creates —
+ * while `import.meta.url` is always the real file. Comparing them raw makes an
+ * invocation through such a link silently do nothing, so both sides are
+ * resolved through realpath first.
  */
 export function isDirectInvocation(
   argv1: string | undefined,

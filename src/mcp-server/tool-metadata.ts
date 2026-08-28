@@ -5529,7 +5529,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
   tastytrade_get_option_chain: {
     title: "Get Equity Option Chain (Full, Flat)",
     description:
-      "Read-only. Fetches the COMPLETE flat equity option chain for an underlying ticker via GET /option-chains/{symbol}, returning a full EquityOption definition for every listed contract across all expirations and strikes. Use when you need per-contract metadata (strike-price, option-type, expiration-date, exercise/settlement style, streamer-symbol, shares-per-contract) to build option orders or resolve contracts. WARNING: the payload is very large for liquid underlyings (SPY, QQQ, AAPL); for cheaper alternatives use tastytrade_get_option_chain_compact (smallest), tastytrade_get_option_chain_nested (grouped for UI / strike+expiration discovery). Behaviorally identical to tastytrade_get_option_chain_full (same endpoint and result); this is the legacy alias of that canonical tool. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of EquityOption objects under `items`). Errors: an unknown or invalid underlying symbol returns an isError result with code not_found.",
+      "Read-only. Fetches the COMPLETE flat equity option chain for an underlying ticker via GET /option-chains/{symbol}, returning a full EquityOption definition for every listed contract across all expirations and strikes. Use when you need per-contract metadata (strike-price, option-type, expiration-date, exercise/settlement style, streamer-symbol, shares-per-contract) to build option orders or resolve contracts. WARNING: the payload is very large for liquid underlyings (SPY, QQQ, AAPL); for cheaper alternatives use tastytrade_get_option_chain_compact (smallest), tastytrade_get_option_chain_nested (grouped for UI / strike+expiration discovery). This is the canonical tool for GET /option-chains/{symbol}, alongside _compact and _nested for the other two chain routes. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of EquityOption objects under `items`). Errors: an unknown or invalid underlying symbol returns an isError result with code not_found.",
     paramDescriptions: {
       symbol:
         "The underlying equity ticker (e.g. 'AAPL', 'SPY'). This is the plain stock symbol, NOT an OCC option symbol.",
@@ -5672,7 +5672,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
   tastytrade_get_option_chain_compact: {
     title: "Get Equity Option Chain (Compact)",
     description:
-      "Read-only. Fetches a bandwidth-minimal equity option chain via GET /option-chains/{symbol}/compact - the smallest of the three chain variants. Each entry returns the option `symbols` and `streamer-symbols` as DELIMITED STRINGS (not JSON arrays) plus shared chain attributes (underlying-symbol, root-symbol, option-chain-type, settlement-type, shares-per-contract, expiration-type, deliverables) instead of a full per-contract object. Use to cheaply enumerate every contract symbol (e.g. to build DXLink streamer subscriptions) when you do NOT need per-contract strike/expiration metadata; for that use tastytrade_get_option_chain or tastytrade_get_option_chain_full, and for grouped UI rendering use tastytrade_get_option_chain_nested. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of CompactOptionChainSerializer objects under `items`). Errors: an unknown underlying symbol returns an isError result with code not_found.",
+      "Read-only. Fetches a bandwidth-minimal equity option chain via GET /option-chains/{symbol}/compact - the smallest of the three chain variants. Each entry returns the option `symbols` and `streamer-symbols` as DELIMITED STRINGS (not JSON arrays) plus shared chain attributes (underlying-symbol, root-symbol, option-chain-type, settlement-type, shares-per-contract, expiration-type, deliverables) instead of a full per-contract object. Use to cheaply enumerate every contract symbol (e.g. to build DXLink streamer subscriptions) when you do NOT need per-contract strike/expiration metadata; for that use tastytrade_get_option_chain, and for grouped UI rendering use tastytrade_get_option_chain_nested. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of CompactOptionChainSerializer objects under `items`). Errors: an unknown underlying symbol returns an isError result with code not_found.",
     paramDescriptions: {
       symbol:
         "The underlying equity ticker (e.g. 'AAPL', 'SPY'). This is the plain stock symbol, NOT an OCC option symbol.",
@@ -5743,143 +5743,10 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       },
     },
   },
-  tastytrade_get_option_chain_full: {
-    title: "Get Equity Option Chain (Full)",
-    description:
-      "Read-only. Behaviorally identical to tastytrade_get_option_chain: calls GET /option-chains/{symbol} and returns a full EquityOption definition for every listed contract across all expirations and strikes. This is the canonical name; tastytrade_get_option_chain is the legacy alias of the same endpoint and result. Use for complete per-contract metadata (strike-price, option-type, expiration-date, exercise/settlement style, streamer-symbol) when building option orders. WARNING: very large for liquid names (SPY, QQQ, AAPL); prefer tastytrade_get_option_chain_compact (smallest) or tastytrade_get_option_chain_nested (grouped for UI). No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of EquityOption objects under `items`). Errors: an unknown underlying symbol returns an isError result with code not_found. (Two live tools hit this endpoint; deprecating one would remove tool-selection ambiguity.)",
-    paramDescriptions: {
-      symbol:
-        "The underlying equity ticker (e.g. 'AAPL', 'SPY'). This is the plain stock symbol, NOT an OCC option symbol.",
-    },
-    outputSchema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      type: "object",
-      description:
-        "Identical to tastytrade_get_option_chain: the unwrapped {data:{items:[...]}} payload from GET /option-chains/{symbol}. getOptionChainFull delegates to getOptionChain, returning response.data.data (the object containing `items`).",
-      additionalProperties: true,
-      required: ["items"],
-      properties: {
-        items: {
-          type: "array",
-          description:
-            "All EquityOption contracts for the underlying, across every expiration and strike.",
-          items: {
-            type: "object",
-            description:
-              "A single equity option contract definition (EquityOption / OptionChainItem).",
-            additionalProperties: true,
-            required: [
-              "symbol",
-              "instrument-type",
-              "underlying-symbol",
-              "option-type",
-              "strike-price",
-              "expiration-date",
-            ],
-            properties: {
-              symbol: {
-                type: "string",
-                description:
-                  "The OCC option symbol, e.g. 'AAPL  260417C00200000'.",
-              },
-              "instrument-type": {
-                type: "string",
-                description:
-                  "Always Equity Option on this endpoint. Open string (not an enum) so a broker-side reclassification cannot fail the read.",
-              },
-              "underlying-symbol": {
-                type: "string",
-                description: "The underlying equity symbol.",
-              },
-              "root-symbol": {
-                type: "string",
-                description:
-                  "The option root symbol (usually same as underlying; differs for adjusted options).",
-              },
-              "option-type": {
-                type: "string",
-                enum: ["C", "P"],
-                description: "'C' for call, 'P' for put.",
-              },
-              "strike-price": {
-                type: "string",
-                description: "Strike price as a string-encoded decimal.",
-              },
-              "expiration-date": {
-                type: "string",
-                format: "date",
-                description: "Expiration date (YYYY-MM-DD).",
-              },
-              "expiration-type": {
-                type: "string",
-                description:
-                  "Expiration classification, e.g. 'Regular', 'Weekly', 'Quarterly', 'End of Month'.",
-              },
-              "expires-at": {
-                type: "string",
-                format: "date-time",
-                description: "Exact expiration timestamp (ISO 8601).",
-              },
-              "exercise-style": {
-                type: ["string", "null"],
-                enum: ["American", "European", null],
-                description:
-                  "Exercise style: American or European; null when the API omits it.",
-              },
-              "settlement-type": {
-                type: "string",
-                description:
-                  "Settlement style. Open set — observed values: 'PM'/'AM' (equity option chains), 'Physical'/'Cash' (instrument records), 'Future' (futures-option chains).",
-              },
-              "option-chain-type": {
-                type: "string",
-                description: "The option chain type classification.",
-              },
-              "shares-per-contract": {
-                type: "integer",
-                description: "Shares per contract (typically 100).",
-              },
-              "days-to-expiration": {
-                type: "integer",
-                description: "Calendar days until expiration.",
-              },
-              active: {
-                type: "boolean",
-                description: "Whether the contract is active.",
-              },
-              "is-closing-only": {
-                type: "boolean",
-                description: "Whether trading is restricted to closing only.",
-              },
-              "listed-market": {
-                type: "string",
-                description: "Exchange where the option is listed.",
-              },
-              "streamer-symbol": {
-                type: "string",
-                description: "DXLink streaming symbol for live quotes.",
-              },
-              "halted-at": {
-                type: ["string", "null"],
-                format: "date-time",
-                description:
-                  "Timestamp when trading was halted; null if not halted.",
-              },
-              "stops-trading-at": {
-                type: "string",
-                format: "date-time",
-                description: "Timestamp when the option stops trading.",
-              },
-            },
-          },
-        },
-      },
-    },
-  },
   tastytrade_get_option_chain_nested: {
     title: "Get Equity Option Chain (Nested)",
     description:
-      "Read-only. Fetches the equity option chain in nested form via GET /option-chains/{symbol}/nested: shared attributes are hoisted to the chain level and contracts are grouped by expiration date, then by strike (call and put symbols side by side). Best for UI rendering of an option grid and for discovering available expirations and strikes in a single call (read the `expirations` object). Prefer this over tastytrade_get_option_expirations to get the expiration calendar, since this endpoint is documented and that one is not. Use the flat full chain (tastytrade_get_option_chain / _full) only when you need per-contract objects rather than grouped data; use _compact for the smallest payload. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of NestedOptionChainSerializer objects under `items`). Errors: an unknown underlying symbol returns an isError result with code not_found.",
+      "Read-only. Fetches the equity option chain in nested form via GET /option-chains/{symbol}/nested: shared attributes are hoisted to the chain level and contracts are grouped by expiration date, then by strike (call and put symbols side by side). Best for UI rendering of an option grid, and the way to get the expiration calendar for an underlying: read each item's `expirations` array and take the `expiration-date` of each entry, instead of downloading a full chain. Use the flat full chain (tastytrade_get_option_chain) only when you need per-contract objects rather than grouped data; use _compact for the smallest payload. No state change; safe to repeat. Returns the underlying {items:[...]} payload (an array of NestedOptionChainSerializer objects under `items`). Errors: an unknown underlying symbol returns an isError result with code not_found.",
     paramDescriptions: {
       symbol:
         "The underlying equity ticker (e.g. 'AAPL', 'SPY'). This is the plain stock symbol, NOT an OCC option symbol.",
@@ -5888,7 +5755,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
       description:
-        "The unwrapped {data:{items:[...]}} payload from GET /option-chains/{symbol}/nested. The client returns response.data.data (the object containing `items`). Each item is a NestedOptionChainSerializer with an `expirations` object keyed by expiration date.",
+        "The unwrapped {data:{items:[...]}} payload from GET /option-chains/{symbol}/nested. The client returns response.data.data (the object containing `items`). Each item is a NestedOptionChainSerializer whose `expirations` is an ARRAY of expiration objects, each carrying its own `expiration-date`.",
       additionalProperties: true,
       required: ["items"],
       properties: {
@@ -5986,55 +5853,6 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
                     },
                   },
                 },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-  tastytrade_get_option_expirations: {
-    title: "Get Equity Option Expirations",
-    description:
-      "Read-only. Returns the available option expiration dates for an underlying equity via GET /option-chains/{symbol}/expirations. Use when you only need the expiration calendar (e.g. to populate an expiration picker) and want to avoid downloading a full chain. IMPORTANT: this endpoint is not present in the bundled tastytrade API reference (only /, /compact, and /nested are documented), so its exact response shape is unverified - the schema below follows tastytrade conventions and should be confirmed against the live API. The documented alternative is tastytrade_get_option_chain_nested, whose `expirations` object is keyed by date and is guaranteed to exist. No state change; safe to repeat. Returns the underlying {items:[...]} payload. Errors: an unknown underlying symbol returns an isError result with code not_found; if the endpoint is unsupported by the targeted API version the call may return isError with code validation or not_found.",
-    paramDescriptions: {
-      symbol:
-        "The underlying equity ticker (e.g. 'AAPL', 'SPY'). This is the plain stock symbol, NOT an OCC option symbol.",
-    },
-    outputSchema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      type: "object",
-      description:
-        "UNVERIFIED against the bundled docs (endpoint /option-chains/{symbol}/expirations is undocumented). The client returns response.data.data. Expected per tastytrade conventions: an {items:[...]} wrapper of expiration entries. Until confirmed against the live API, prefer deriving expirations from the /nested chain's date-keyed `expirations` map (tastytrade_get_option_chain_nested).",
-      additionalProperties: true,
-      required: ["items"],
-      properties: {
-        items: {
-          type: "array",
-          description:
-            "Available expirations for the underlying (shape unverified).",
-          items: {
-            type: "object",
-            additionalProperties: true,
-            properties: {
-              "expiration-date": {
-                type: "string",
-                format: "date",
-                description: "Expiration date (YYYY-MM-DD).",
-              },
-              "expiration-type": {
-                type: "string",
-                description:
-                  "Expiration classification, e.g. 'Regular', 'Weekly', 'Quarterly'.",
-              },
-              "days-to-expiration": {
-                type: "integer",
-                description: "Calendar days until expiration.",
-              },
-              "settlement-type": {
-                type: "string",
-                description:
-                  "Settlement style. Open set — observed values: 'PM'/'AM' (equity option chains), 'Physical'/'Cash' (instrument records), 'Future' (futures-option chains).",
               },
             },
           },

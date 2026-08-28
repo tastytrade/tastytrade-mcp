@@ -1691,13 +1691,6 @@ export class TastytradeClient {
     return envelopeData(response);
   }
 
-  async getOptionExpirations(symbol: string) {
-    const response = await this.client.get(
-      apiPath(["/option-chains/", seg("symbol", symbol), "/expirations"]),
-    );
-    return envelopeData(response);
-  }
-
   /**
    * Nested futures-option chain.
    *
@@ -2093,12 +2086,6 @@ export class TastytradeClient {
       params: params ?? {},
     });
     return envelopeItemsOrBody(response);
-  }
-
-  /** Full option chain — same endpoint the existing `getOptionChain` hits.
-   *  Exposed under a clearer name. */
-  async getOptionChainFull(symbol: string) {
-    return this.getOptionChain(symbol);
   }
 
   /**

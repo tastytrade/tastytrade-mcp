@@ -364,18 +364,18 @@ describe("configuration copied from the dispatcher", () => {
     expect(check.data?.limit).toBe(DEFAULT_MAX_ORDER_NOTIONAL_USD);
   });
 
-  it("is wired up as a bin entry pointing at the compiled doctor", () => {
+  it("is not published to npm, so it exposes no installable command", () => {
     const pkg = JSON.parse(
       readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
-    ) as { bin?: Record<string, string>; files?: string[] };
-    expect(pkg.bin).toBeDefined();
-    const targets = Object.values(pkg.bin ?? {});
-    expect(targets).toContain("dist/doctor.js");
-    // dist/ must stay in `files` or an installed package has no bin target.
-    expect(pkg.files).toContain("dist");
+    ) as { private?: boolean; bin?: unknown; publishConfig?: unknown };
+    // The supported install paths are clone-and-build and the container image.
+    // `private` is what makes that stick: without it a publish still succeeds.
+    expect(pkg.private).toBe(true);
+    expect(pkg.bin).toBeUndefined();
+    expect(pkg.publishConfig).toBeUndefined();
   });
 
-  it("keeps the shebang first in the source, so the bin link is executable", () => {
+  it("keeps the shebang first in the source, so dist/doctor.js runs directly", () => {
     const source = readFileSync(
       path.join(REPO_ROOT, "src", "doctor.ts"),
       "utf8",
@@ -3432,17 +3432,15 @@ describe("isDirectInvocation", () => {
     );
   });
 
-  it("resolves an npm bin symlink to the real file", () => {
-    // The case that matters: an installed package runs
-    // node_modules/.bin/tastytrade-mcp-doctor, which is a symlink. Comparing the
+  it("resolves a symlink on PATH to the real file", () => {
+    // The case that matters: argv[1] is a link an operator put on PATH, or one
+    // a container layer created, rather than the file itself. Comparing the
     // paths raw would make the CLI silently do nothing.
     const realpath = (p: string) =>
-      p === "/pkg/node_modules/.bin/tastytrade-mcp-doctor"
-        ? "/pkg/dist/doctor.js"
-        : p;
+      p === "/usr/local/bin/tastytrade-doctor" ? "/pkg/dist/doctor.js" : p;
     expect(
       isDirectInvocation(
-        "/pkg/node_modules/.bin/tastytrade-mcp-doctor",
+        "/usr/local/bin/tastytrade-doctor",
         moduleUrl,
         realpath,
       ),

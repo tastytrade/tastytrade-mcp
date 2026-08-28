@@ -134,8 +134,6 @@ export const TOOL_RATE_KEYS: Record<string, RateKey> = {
   tastytrade_get_option_chain: "option_chains",
   tastytrade_get_option_chain_compact: "option_chains",
   tastytrade_get_option_chain_nested: "option_chains",
-  tastytrade_get_option_chain_full: "option_chains",
-  tastytrade_get_option_expirations: "option_chains",
   tastytrade_get_futures_option_chains: "option_chains",
   tastytrade_get_futures_option_chain_full: "option_chains",
 
