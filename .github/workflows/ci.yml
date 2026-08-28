@@ -110,11 +110,10 @@ jobs:
       # or process substitution, both of which preserve the exit status.
       #
       # build.sh itself runs, in order and failing fast: npm ci, prettier
-      # --check, eslint, tsc --noEmit, tsc build, jest + coverage thresholds,
-      # the integration tooling's offline self-test, npm audit (fails on
-      # HIGH/CRITICAL), and a gitleaks secret scan. Nine stages, all hermetic —
-      # no credentials, no network beyond the registry install and the gitleaks
-      # download above.
+      # --check, eslint, tsc --noEmit, tsc build, jest + coverage thresholds
+      # (and the coverage-floor check), npm audit (fails on HIGH/CRITICAL), and
+      # a gitleaks secret scan. Eight stages, all hermetic — no credentials, no
+      # network beyond the registry install and the gitleaks download above.
       #
       # REPO_IS_FORK is the one thing the gate cannot work out for itself.
       # The test suite cross-checks the repository slug that the
