@@ -11,9 +11,8 @@
 #
 # Nothing in the repository needs it committed: the Docker image compiles it in
 # its own build stage, and ./build.sh builds before it tests. `files: ["dist",
-# …]` in package.json describes the PUBLISHED TARBALL, not version control — so
-# a release must compile before `npm pack` / `npm publish` runs. Run
-# `npm run build` after a fresh clone.
+# …]` in package.json describes the contents of an `npm pack` tarball, not
+# version control. Run `npm run build` after a fresh clone.
 /dist
 
 # Local-only developer tooling (live integration harness, scratch, etc.) —

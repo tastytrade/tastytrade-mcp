@@ -1,6 +1,7 @@
 {
   "name": "@tastytrade/mcp-server",
   "version": "1.0.0",
+  "private": true,
   "description": "Model Context Protocol server for the tastytrade brokerage API: tools, resources and prompts for quotes, positions and order flow, with every money-moving action behind a dry-run confirmation gate.",
   "license": "MIT",
   "author": "tastytrade",
@@ -26,9 +27,6 @@
   ],
   "type": "module",
   "main": "dist/index.js",
-  "bin": {
-    "tastytrade-mcp-doctor": "dist/doctor.js"
-  },
   "engines": {
     "node": ">=22"
   },
@@ -65,8 +63,5 @@
     "ts-jest": "^29.4.5",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.60.1"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }
