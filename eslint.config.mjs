@@ -9,7 +9,8 @@ export default tseslint.config(
       "coverage/**",
       "node_modules/**",
       "tastytrade-llms-txt-docs/**",
-      // Local-only dev tooling (gitignored); not part of the linted source.
+      // Local-only developer tooling. /dev is gitignored and is never part of
+      // a clone, so this entry only bites in a working tree that has one.
       "dev/**",
     ],
   },
@@ -21,8 +22,8 @@ export default tseslint.config(
     // The flat config sets no environment globals, and `src/` only escapes
     // `no-undef` because typescript-eslint waives that rule for .ts files —
     // TypeScript already resolves globals through @types/node. Untyped .mjs
-    // (the integration runner, and any future script) gets no such waiver, so
-    // `console`, `process` and the timer functions read as undefined.
+    // (this config, jest.config.mjs, scripts/, and any future script) gets no
+    // such waiver, so `console`, `process` and the timers read as undefined.
     //
     // Declaring the runtime is the honest fix; switching `no-undef` off would
     // lose a real check.

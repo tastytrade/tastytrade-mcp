@@ -1,16 +1,15 @@
 # Dependabot — automated dependency updates.
 #
 # WHY THIS EXISTS. This tree once carried a pile of open advisories with nothing
-# watching it. `./build.sh` stage 8 now fails the build on any HIGH or CRITICAL
+# watching it. `./build.sh` stage 7 now fails the build on any HIGH or CRITICAL
 # advisory, so the problem cannot ship — but a gate only speaks when somebody
 # runs it. Dependabot is what turns "we would have found out eventually" into a
 # pull request that arrives on its own.
 #
 # A Dependabot pull request can go green here without help: ci.yml triggers on
-# `pull_request` with no branch filter, so the branch gets the full nine-stage
-# gate, and no stage needs a secret (integration.yml, the only credentialed
-# workflow, deliberately has no `pull_request` trigger). A bump that clears an
-# advisory therefore arrives already proven.
+# `pull_request` with no branch filter, so the branch gets the full eight-stage
+# gate, and no stage of that gate needs a secret. A bump that clears an advisory
+# therefore arrives already proven.
 #
 # REVIEWERS ARE DELIBERATELY NOT LISTED. Dependabot's pull requests are ordinary
 # pull requests, so .github/CODEOWNERS assigns them like any other change. One
