@@ -1,0 +1,164 @@
+{
+  "buying-power-effect": {
+    "change-in-margin-requirement": "1.0",
+    "change-in-margin-requirement-effect": "Debit",
+    "change-in-buying-power": "1.002332",
+    "change-in-buying-power-effect": "Debit",
+    "current-buying-power": "1000000.0",
+    "current-buying-power-effect": "Credit",
+    "new-buying-power": "999999.997668",
+    "new-buying-power-effect": "Credit",
+    "isolated-order-margin-requirement": "0.0",
+    "isolated-order-margin-requirement-effect": "None",
+    "is-spread": false,
+    "impact": "1.002332",
+    "effect": "Debit"
+  },
+  "complex-order": {
+    "account-number": "5XX00000",
+    "type": "OCO",
+    "orders": [
+      {
+        "account-number": "5XX00000",
+        "cancellable": true,
+        "complex-order-id": 3,
+        "complex-order-tag": "OCO::order",
+        "contingent-status": "Pending Order",
+        "editable": true,
+        "edited": false,
+        "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+        "order-type": "Limit",
+        "preflight-id": 0,
+        "price": "99999.0",
+        "price-effect": "Credit",
+        "size": 1,
+        "status": "Contingent",
+        "time-in-force": "GTC",
+        "underlying-instrument-type": "Equity",
+        "underlying-symbol": "SPY",
+        "updated-at": 0,
+        "legs": [
+          {
+            "action": "Sell to Open",
+            "instrument-type": "Equity",
+            "quantity": 1,
+            "remaining-quantity": 1,
+            "symbol": "SPY",
+            "fills": []
+          }
+        ]
+      },
+      {
+        "account-number": "5XX00000",
+        "cancellable": true,
+        "complex-order-id": 3,
+        "complex-order-tag": "OCO::order",
+        "contingent-status": "Pending Order",
+        "editable": true,
+        "edited": false,
+        "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+        "order-type": "Stop",
+        "preflight-id": 1,
+        "size": 1,
+        "status": "Contingent",
+        "stop-trigger": "1.0",
+        "time-in-force": "GTC",
+        "underlying-instrument-type": "Equity",
+        "underlying-symbol": "SPY",
+        "updated-at": 0,
+        "legs": [
+          {
+            "action": "Sell to Close",
+            "instrument-type": "Equity",
+            "quantity": 1,
+            "remaining-quantity": 1,
+            "symbol": "SPY",
+            "fills": []
+          }
+        ]
+      }
+    ]
+  },
+  "fee-calculation": {
+    "regulatory-fees": "0.000166",
+    "regulatory-fees-effect": "Debit",
+    "regulatory-fees-breakdown": [
+      {
+        "name": "exchange",
+        "value": "0.0",
+        "effect": "None"
+      },
+      {
+        "name": "nfa",
+        "value": "0.0",
+        "effect": "None"
+      },
+      {
+        "name": "orf",
+        "value": "0.0",
+        "effect": "None"
+      },
+      {
+        "name": "sec",
+        "value": "0.0",
+        "effect": "None"
+      },
+      {
+        "name": "taf",
+        "value": "0.000166",
+        "effect": "Debit"
+      }
+    ],
+    "clearing-fees": "0.001",
+    "clearing-fees-effect": "Debit",
+    "clearing-fees-breakdown": [
+      {
+        "name": "clearing",
+        "value": "0.001",
+        "effect": "Debit"
+      }
+    ],
+    "commission": "0.0",
+    "commission-effect": "None",
+    "commission-breakdown": [
+      {
+        "name": "brokerage",
+        "value": "0.0",
+        "effect": "None"
+      }
+    ],
+    "proprietary-index-option-fees": "0.0",
+    "proprietary-index-option-fees-effect": "None",
+    "proprietary-fees-breakdown": [
+      {
+        "name": "proprietary",
+        "value": "0.0",
+        "effect": "None"
+      }
+    ],
+    "total-fees": "0.001166",
+    "total-fees-effect": "Debit",
+    "rebates": "0.0",
+    "rebates-effect": "None",
+    "rebates-breakdown": [
+      {
+        "name": "rebate",
+        "value": "0.0",
+        "effect": "None"
+      }
+    ],
+    "per-quantity": false
+  },
+  "notes": [],
+  "warnings": [
+    {
+      "code": "closing_with_no_position",
+      "message": "You cannot route a closing order without an existing position to close. This order will be updated to a sell to open order when routed."
+    },
+    {
+      "code": "tif.next_valid_session",
+      "message": "Your order will begin working during next valid session."
+    }
+  ],
+  "confirmation_token": "00000000-0000-0000-0000-000000000000"
+}

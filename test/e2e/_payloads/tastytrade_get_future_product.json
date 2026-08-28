@@ -1,0 +1,719 @@
+{
+  "active-months": ["H", "M", "U", "Z"],
+  "back-month-first-calendar-symbol": true,
+  "cash-settled": true,
+  "clearing-code": "ES",
+  "clearing-exchange-code": "16",
+  "clearport-code": "ES",
+  "code": "ES",
+  "description": "E Mini S&P",
+  "display-factor": "0.01",
+  "exchange": "CME",
+  "first-notice": false,
+  "legacy-code": "ES",
+  "legacy-exchange-code": "CME",
+  "listed-months": ["H", "M", "U", "Z"],
+  "market-sector": "Equity Index",
+  "notional-multiplier": "50.0",
+  "product-type": "Financial",
+  "security-group": "ES",
+  "small-notional": false,
+  "streamer-exchange-code": "XCME",
+  "supported": true,
+  "root-symbol": "/ES",
+  "tick-size": "0.25",
+  "underlying-description": "S&P 500 Index",
+  "underlying-identifier": "SPX",
+  "option-products": [
+    {
+      "cash-settled": false,
+      "clearing-code": "W1",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "EW1",
+      "code": "EW1",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "EW1",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "EW1",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "W2",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "EW2",
+      "code": "EW2",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "EW2",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "EW2",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "W3",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "EW3",
+      "code": "EW3",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "EW3",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "EW3",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "W4",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "EW4",
+      "code": "EW4",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "EW4",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "EW4",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EW",
+      "clearing-exchange-code": "16",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "EW",
+      "code": "EW",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "End-Of-Month",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "EW",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "EW",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "A4",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E1A",
+      "code": "E1A",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E1A",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E1A",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "A5",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E2A",
+      "code": "E2A",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E2A",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E2A",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "A6",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E3A",
+      "code": "E3A",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E3A",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E3A",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "A7",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E4A",
+      "code": "E4A",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E4A",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E4A",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "A8",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E5A",
+      "code": "E5A",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E5A",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E5A",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "Z1",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E1C",
+      "code": "E1C",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E1C",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E1C",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "Z2",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E2C",
+      "code": "E2C",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E2C",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E2C",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "Z3",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E3C",
+      "code": "E3C",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E3C",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E3C",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "Z4",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E4C",
+      "code": "E4C",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E4C",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E4C",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "Z5",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E5C",
+      "code": "E5C",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E5C",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E5C",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "ER",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E1B",
+      "code": "E1B",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E1B",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E1B",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "ES",
+      "clearing-exchange-code": "16",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "ES",
+      "code": "ES",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Regular",
+      "is-am-settled": true,
+      "is-rollover": false,
+      "legacy-code": "ES",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "ES",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 34200,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "ES",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E2B",
+      "code": "E2B",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E2B",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E2B",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EU",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E3B",
+      "code": "E3B",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E3B",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E3B",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EV",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E4B",
+      "code": "E4B",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E4B",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E4B",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EW",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E5B",
+      "code": "E5B",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E5B",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E5B",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EX",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E1D",
+      "code": "E1D",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E1D",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E1D",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EY",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E2D",
+      "code": "E2D",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E2D",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E2D",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "EZ",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E3D",
+      "code": "E3D",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": false,
+      "legacy-code": "E3D",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E3D",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "E1",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E4D",
+      "code": "E4D",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E4D",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E4D",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    },
+    {
+      "cash-settled": false,
+      "clearing-code": "E2",
+      "clearing-exchange-code": "9C",
+      "clearing-price-multiplier": "1.0",
+      "clearport-code": "E5D",
+      "code": "E5D",
+      "display-factor": "0.01",
+      "exchange": "CME",
+      "expiration-type": "Weekly",
+      "is-am-settled": false,
+      "is-rollover": true,
+      "legacy-code": "E5D",
+      "market-sector": "Equity Index",
+      "product-type": "Physical",
+      "root-symbol": "E5D",
+      "settlement-delay-days": 0,
+      "supported": true,
+      "futures-trading-cutoff-times": [
+        {
+          "offset-seconds": 57600,
+          "timezone": "Market Zone",
+          "timing": "Default"
+        }
+      ]
+    }
+  ],
+  "roll": {
+    "active-count": 6,
+    "business-days-offset": 4,
+    "cash-settled": true,
+    "first-notice": false,
+    "name": "expanded_offering_equity_index"
+  },
+  "futures-trading-cutoff-times": [
+    {
+      "offset-seconds": 34200,
+      "timezone": "Market Zone",
+      "timing": "Default"
+    }
+  ]
+}

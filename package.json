@@ -1,0 +1,72 @@
+{
+  "name": "@tastytrade/mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server for the tastytrade brokerage API: tools, resources and prompts for quotes, positions and order flow, with every money-moving action behind a dry-run confirmation gate.",
+  "license": "MIT",
+  "author": "tastytrade",
+  "homepage": "https://github.com/tastytrade/tastytrade-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tastytrade/tastytrade-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tastytrade/tastytrade-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "tastytrade",
+    "tastyworks",
+    "trading",
+    "brokerage",
+    "options",
+    "futures",
+    "stdio"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "tastytrade-mcp-doctor": "dist/doctor.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": [
+    "dist",
+    "tastytrade-llms-txt-docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepack": "npm run build",
+    "doctor": "node dist/doctor.js",
+    "watch": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.17.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "eslint": "^10.4.1",
+    "eslint-config-prettier": "^10.1.8",
+    "jest": "^30.2.0",
+    "prettier": "^3.8.3",
+    "ts-jest": "^29.4.5",
+    "typescript": "^5.3.0",
+    "typescript-eslint": "^8.60.1"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

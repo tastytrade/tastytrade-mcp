@@ -1,0 +1,193 @@
+{
+  "items": [
+    {
+      "id": 1075264,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-12T19:33:51.327+00:00",
+      "editable": false,
+      "edited": false,
+      "ext-client-order-id": "JAAAAAXQbUXvvcDx9E",
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Limit",
+      "price": "1.02",
+      "price-effect": "Debit",
+      "received-at": "2026-06-12T19:33:24.172+00:00",
+      "replaces-order-id": 1075261,
+      "size": 1,
+      "status": "Cancelled",
+      "terminal-at": "2026-06-12T19:33:51.381+00:00",
+      "time-in-force": "Day",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "AAPL",
+      "updated-at": 1781292831405,
+      "legs": [
+        {
+          "action": "Buy to Open",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "AAPL",
+          "fills": []
+        }
+      ]
+    },
+    {
+      "id": 1075263,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-12T19:33:37.778+00:00",
+      "complex-order-id": 56544,
+      "complex-order-tag": "OCO::order",
+      "editable": false,
+      "edited": false,
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Stop",
+      "received-at": "2026-06-12T19:33:23.240+00:00",
+      "size": 1,
+      "status": "Cancelled",
+      "stop-trigger": "1.0",
+      "terminal-at": "2026-06-12T19:33:37.778+00:00",
+      "time-in-force": "GTC",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "SPY",
+      "updated-at": 1781292817789,
+      "legs": [
+        {
+          "action": "Sell to Close",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "SPY",
+          "fills": []
+        }
+      ]
+    },
+    {
+      "id": 1075262,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-12T19:33:37.744+00:00",
+      "complex-order-id": 56544,
+      "complex-order-tag": "OCO::order",
+      "editable": false,
+      "edited": false,
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Limit",
+      "price": "99999.0",
+      "price-effect": "Credit",
+      "received-at": "2026-06-12T19:33:23.230+00:00",
+      "size": 1,
+      "status": "Cancelled",
+      "terminal-at": "2026-06-12T19:33:37.744+00:00",
+      "time-in-force": "GTC",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "SPY",
+      "updated-at": 1781292817755,
+      "legs": [
+        {
+          "action": "Sell to Open",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "SPY",
+          "fills": []
+        }
+      ]
+    },
+    {
+      "id": 1075261,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-12T19:33:24.221+00:00",
+      "editable": false,
+      "edited": true,
+      "ext-client-order-id": "JAAAAAXQbE4nc9ju9f",
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Limit",
+      "price": "1.0",
+      "price-effect": "Debit",
+      "received-at": "2026-06-12T19:33:22.519+00:00",
+      "replacing-order-id": 1075264,
+      "size": 1,
+      "status": "Cancelled",
+      "terminal-at": "2026-06-12T19:33:24.277+00:00",
+      "time-in-force": "Day",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "AAPL",
+      "updated-at": 1781292804301,
+      "legs": [
+        {
+          "action": "Buy to Open",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "AAPL",
+          "fills": []
+        }
+      ]
+    },
+    {
+      "id": 1068086,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-11T14:16:27.901+00:00",
+      "editable": false,
+      "edited": false,
+      "ext-client-order-id": "JAAAAAXGyUENYLw749",
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Limit",
+      "price": "1.0",
+      "price-effect": "Debit",
+      "received-at": "2026-06-11T14:15:52.518+00:00",
+      "size": 1,
+      "status": "Cancelled",
+      "terminal-at": "2026-06-11T14:16:27.975+00:00",
+      "time-in-force": "Day",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "AAPL",
+      "updated-at": 1781187388013,
+      "legs": [
+        {
+          "action": "Buy to Open",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "AAPL",
+          "fills": []
+        }
+      ]
+    },
+    {
+      "id": 1068063,
+      "account-number": "5XX00000",
+      "cancellable": false,
+      "cancelled-at": "2026-06-11T14:15:05.849+00:00",
+      "editable": false,
+      "edited": false,
+      "ext-client-order-id": "JAAAAAXGwZc1GpZQS4",
+      "global-request-id": "00000000-0000-0000-0000-000000000000=order-api=000000000000",
+      "order-type": "Limit",
+      "price": "1.0",
+      "price-effect": "Debit",
+      "received-at": "2026-06-11T14:14:19.418+00:00",
+      "size": 1,
+      "status": "Cancelled",
+      "terminal-at": "2026-06-11T14:15:05.943+00:00",
+      "time-in-force": "Day",
+      "underlying-instrument-type": "Equity",
+      "underlying-symbol": "AAPL",
+      "updated-at": 1781187306028,
+      "legs": [
+        {
+          "action": "Buy to Open",
+          "instrument-type": "Equity",
+          "quantity": 1,
+          "remaining-quantity": 1,
+          "symbol": "AAPL",
+          "fills": []
+        }
+      ]
+    }
+  ]
+}

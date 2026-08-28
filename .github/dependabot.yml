@@ -1,0 +1,98 @@
+# Dependabot — automated dependency updates.
+#
+# WHY THIS EXISTS. This tree once carried a pile of open advisories with nothing
+# watching it. `./build.sh` stage 8 now fails the build on any HIGH or CRITICAL
+# advisory, so the problem cannot ship — but a gate only speaks when somebody
+# runs it. Dependabot is what turns "we would have found out eventually" into a
+# pull request that arrives on its own.
+#
+# A Dependabot pull request can go green here without help: ci.yml triggers on
+# `pull_request` with no branch filter, so the branch gets the full nine-stage
+# gate, and no stage needs a secret (integration.yml, the only credentialed
+# workflow, deliberately has no `pull_request` trigger). A bump that clears an
+# advisory therefore arrives already proven.
+#
+# REVIEWERS ARE DELIBERATELY NOT LISTED. Dependabot's pull requests are ordinary
+# pull requests, so .github/CODEOWNERS assigns them like any other change. One
+# place to edit when ownership moves is the point of CODEOWNERS.
+#
+# `docker` IS DELIBERATELY NOT WATCHED. The Dockerfile reaches its base image
+# through a build argument (`ARG NODE_IMAGE=node:22-alpine`, then
+# `FROM ${NODE_IMAGE}`), and Dependabot cannot rewrite a templated `FROM` line.
+# A `package-ecosystem: docker` entry would look like coverage while updating
+# nothing at all, which is worse than the honest gap: bump the base image by
+# hand, or pin it literally in the Dockerfile first and then add the entry.
+version: 2
+updates:
+  # --- npm ------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    # Leave the caret ranges in package.json alone unless a fix genuinely needs
+    # a higher floor. Most updates then land as a lockfile-only diff, which is
+    # the smallest thing a reviewer can be handed.
+    versioning-strategy: increase-if-necessary
+    # `include: scope` is what appends the `(deps)` / `(deps-dev)` scope, so the
+    # prefix must NOT contain one: `prefix: chore(deps)` here would produce
+    # "chore(deps)(deps): bump ...". As written this yields
+    # "chore(deps): bump axios ..." and "chore(deps-dev): bump jest ...",
+    # matching the convention already in this repository's history.
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # The toolchain (typescript, eslint, prettier, jest, ts-jest, the @types
+      # packages) is most of the dependency list and moves constantly. Batched,
+      # it is one weekly decision that the gate either passes or does not.
+      # Unbatched it is ten pull requests a week, and a flood nobody reads is
+      # the failure mode that ends with Dependabot switched off.
+      #
+      # `applies-to: version-updates` is stated explicitly because it is the
+      # important half: grouping never applies to a SECURITY update, so a fix
+      # for an advisory still arrives as its own small pull request that can be
+      # reviewed and merged on its own.
+      dev-dependencies:
+        applies-to: version-updates
+        dependency-type: development
+        patterns:
+          - "*"
+      # No group for the two runtime dependencies (@modelcontextprotocol/sdk and
+      # axios). Those are the ones that ship inside the container image and sit
+      # on the money-moving path, so each one gets its own pull request and its
+      # own read.
+
+  # --- GitHub Actions -------------------------------------------------------
+  #
+  # The ecosystem people forget. Every workflow pins each action to a COMMIT
+  # DIGEST with the version in a trailing comment
+  # (actions/checkout@3d3c42e… # v7.0.1), and those pins go stale exactly like
+  # an npm range does — except a stale action is an unreviewed supply-chain
+  # input with write-shaped permissions available to it, not just a library.
+  #
+  # Dependabot understands digest pins: it rewrites the SHA and the trailing
+  # version comment together, which is the whole reason the digest rule is
+  # affordable. Do not "simplify" any `uses:` back to a major tag — release.yml
+  # explains why, and the tag is mutable by whoever owns the action's
+  # repository.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: chore
+      include: scope
+    groups:
+      # Three workflows sharing largely the same actions: one pull request.
+      actions:
+        applies-to: version-updates
+        patterns:
+          - "*"

@@ -1,0 +1,243 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.tastytrade/tastytrade-mcp",
+  "title": "tastytrade",
+  "description": "Agent access to tastytrade brokerage accounts: quotes, positions, and dry-run-gated order flow.",
+  "version": "1.0.0",
+  "websiteUrl": "https://github.com/tastytrade/tastytrade-mcp#readme",
+  "repository": {
+    "url": "https://github.com/tastytrade/tastytrade-mcp",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/tastytrade/tastytrade-mcp:1.0.0",
+      "version": "1.0.0",
+      "runtimeHint": "docker",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "positional",
+          "value": "run",
+          "valueHint": "run"
+        },
+        {
+          "type": "positional",
+          "value": "-i",
+          "valueHint": "-i",
+          "description": "Required. This is a stdio MCP server; without -i Docker leaves stdin detached, the transport reads EOF immediately, and the container exits with no output."
+        },
+        {
+          "type": "positional",
+          "value": "--rm",
+          "valueHint": "--rm"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "TASTYTRADE_API_URL",
+          "description": "API host. Defaults to the sandbox (cert) environment; set the production host explicitly to trade real money. Only a recognised tastytrade API host is accepted: any other host makes the server refuse to start rather than send the OAuth credentials there, unless that exact hostname is named in TASTYTRADE_ALLOW_UNKNOWN_API_HOST.",
+          "default": "https://api.cert.tastyworks.com",
+          "choices": [
+            "https://api.cert.tastyworks.com",
+            "https://api.tastyworks.com"
+          ],
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_CLIENT_ID",
+          "description": "OAuth2 client id for your tastytrade OAuth application.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "TASTYTRADE_CLIENT_SECRET",
+          "description": "OAuth2 client secret for your tastytrade OAuth application.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "TASTYTRADE_REFRESH_TOKEN",
+          "description": "OAuth2 refresh token. The server exchanges it for short-lived access tokens and refreshes them automatically.",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "MAX_ORDER_NOTIONAL_USD",
+          "description": "Hard cap on the buying-power impact of a single order. Exceeding it fails the pre-submit sanity check.",
+          "default": "50000",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_READ_ONLY",
+          "description": "Set to true to serve only read-only tools. Write and destructive tools are withheld entirely.",
+          "default": "false",
+          "format": "boolean",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_HTTP_TIMEOUT_MS",
+          "description": "Per-request HTTP timeout in milliseconds, applied to every tastytrade call including the token grant. 0 is refused, because the HTTP client reads it as 'wait forever'.",
+          "default": "30000",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_MAX_RESPONSE_BYTES",
+          "description": "Maximum size of a response this server will read, applied to every tastytrade call including the token grant. 0 and -1 are refused; the bound cannot be switched off.",
+          "default": "33554432",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_HTTP_WALL_CLOCK_MS",
+          "description": "Ceiling on the total elapsed time of one request, in milliseconds. Separate from TASTYTRADE_HTTP_TIMEOUT_MS, which is a socket inactivity timeout an upstream can dribble past forever. Must be strictly greater than that value or it is refused. Defaults to three times it.",
+          "default": "90000",
+          "format": "number",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_ACCEPT_VERSION",
+          "description": "Override the Accept-Version request header. Defaults to today's UTC date as YYYYMMDD.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_USER_AGENT",
+          "description": "Override the required User-Agent request header. Defaults to <package name>/<version>.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_CREDENTIAL_CHANNEL",
+          "description": "What the server does about an interposed credential channel: 'warn' (the default, and any unrecognised value) names a proxy or a trust-store override on stderr and in the preflight report and starts anyway; 'strict' refuses to start unless the proxy's hostname is named in TASTYTRADE_ALLOW_PROXY. There is no acknowledgement for a trust-store override (NODE_EXTRA_CA_CERTS, or SSL_CERT_FILE / SSL_CERT_DIR with --use-openssl-ca): under 'strict' those are always a refusal.",
+          "default": "warn",
+          "choices": ["warn", "strict"],
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_ALLOW_PROXY",
+          "description": "Comma-separated proxy HOSTNAMES you acknowledge as carriers of the credential POST. Read only under TASTYTRADE_CREDENTIAL_CHANNEL=strict, where the hostname in http_proxy / https_proxy / all_proxy must appear here or the server refuses to start. Hostnames rather than a boolean, so a config that later retargets the proxy fails closed again.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TASTYTRADE_ALLOW_UNKNOWN_API_HOST",
+          "description": "Comma-separated hostnames acknowledged as destinations for the OAuth refresh token and client secret. The server refuses to start when TASTYTRADE_API_URL names a host that is not a recognised tastytrade API host; naming that exact hostname here allows it, for a proxy, a gateway or a local test double. It does not lift the refusal of plain http: to a non-loopback host, and an acknowledged host still warns on every start.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "transport": "stdio",
+      "runtime": "node >=22",
+      "toolSurface": {
+        "tools": 86,
+        "readOnly": 72,
+        "write": 2,
+        "destructive": 12,
+        "note": "Every destructive tool requires a single-use confirmation token issued by its matching dry_run_* tool, valid for 60 seconds and bound to a hash of the submitted arguments."
+      },
+      "install": {
+        "note": "Two supported install paths: clone-and-build, or the published container image. This server is deliberately not published to npm, so there is no npx invocation.",
+        "cloneAndBuild": {
+          "description": "Clone the repository, build it, and point your MCP client at the compiled entrypoint.",
+          "setup": [
+            "git clone https://github.com/tastytrade/tastytrade-mcp.git",
+            "cd tastytrade-mcp",
+            "npm ci",
+            "npm run build"
+          ],
+          "clientConfig": {
+            "mcpServers": {
+              "tastytrade": {
+                "command": "node",
+                "args": ["/absolute/path/to/tastytrade-mcp/dist/index.js"],
+                "env": {
+                  "TASTYTRADE_API_URL": "https://api.cert.tastyworks.com",
+                  "TASTYTRADE_CLIENT_ID": "your_client_id",
+                  "TASTYTRADE_CLIENT_SECRET": "your_client_secret",
+                  "TASTYTRADE_REFRESH_TOKEN": "your_refresh_token"
+                }
+              }
+            }
+          },
+          "notes": [
+            "args must be an absolute path; MCP clients do not resolve ~ or relative paths.",
+            "A .env file in the repository is NOT auto-loaded. Credentials must come from the client's env block, or be exported in the launching shell."
+          ]
+        },
+        "docker": {
+          "description": "Run the published image. Credentials come from an --env-file that stays outside the image.",
+          "setup": [
+            "Write a .env holding TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET and TASTYTRADE_REFRESH_TOKEN, one KEY=value per line. No clone is needed for this path; .env.sample in the repository lists the same names.",
+            "docker pull ghcr.io/tastytrade/tastytrade-mcp:1.0.0"
+          ],
+          "clientConfig": {
+            "mcpServers": {
+              "tastytrade": {
+                "command": "docker",
+                "args": [
+                  "run",
+                  "-i",
+                  "--rm",
+                  "--env-file",
+                  "/absolute/path/to/.env",
+                  "ghcr.io/tastytrade/tastytrade-mcp:1.0.0"
+                ]
+              }
+            }
+          },
+          "notes": [
+            "The -i flag is mandatory. This is a stdio server: without -i the container exits immediately with no output, which is indistinguishable from a crash.",
+            "Do not pass -d/--detach and do not publish a port. There is no HTTP listener.",
+            "--env-file keeps credentials out of every image layer and out of the client config file."
+          ]
+        }
+      },
+      "safety": {
+        "rateLimits": {
+          "scheme": "Per-second. These are tastytrade's published request limits, enforced in-process and charged once per tool call.",
+          "global": "50/sec, across every tool",
+          "perEndpoint": {
+            "marketData": "2/sec",
+            "optionChains": "2/sec",
+            "singleEquity": "3/sec",
+            "equitiesList": "2/sec",
+            "futures": "1/sec",
+            "futureProducts": "1/sec",
+            "singleEquityOption": "3/sec",
+            "singleFutureOption": "3/sec",
+            "positions": "1/sec",
+            "balances": "1/sec",
+            "accounts": "1/sec"
+          },
+          "howItApplies": "Every call is charged against the global cap; a call reaching one of the endpoints above is charged against that endpoint's ceiling as well. Tools that are not in the table carry no per-endpoint ceiling, except that the twelve destructive tools are additionally rate-limited by an internal safety cap: a burst of order submissions or cancellations can be refused while the global cap still has room. That cap is a backstop rather than a published budget, so it is not quoted here and a refusal does not name it. Exhaustion returns a rate_limit_exceeded ToolError carrying retry_after_ms.",
+          "planningNote": "A bucket holds one second of budget, so a 1/sec endpoint permits one call and then a full second of waiting; there is nothing to burst through. Size a polling loop per endpoint rather than per agent, and stream live prices over DXLink instead of polling for them."
+        },
+        "notes": [
+          "The API host defaults to the sandbox. Point TASTYTRADE_API_URL at https://api.tastyworks.com only when you intend to trade real money.",
+          "Set TASTYTRADE_READ_ONLY=true to withhold every write and destructive tool.",
+          "MAX_ORDER_NOTIONAL_USD caps single-order buying-power impact; the default is 50000.",
+          "An unrecognised host in TASTYTRADE_API_URL is a startup refusal rather than a warning: the server exits non-zero rather than POST the refresh token and client secret to a host it does not recognise. TASTYTRADE_ALLOW_UNKNOWN_API_HOST=<hostname> acknowledges one by name, for a proxy or a gateway.",
+          "A resources/read is charged the same per-endpoint ceilings as the tool that reaches the same endpoint, plus the global cap at the template's declared fan-out."
+        ]
+      }
+    }
+  }
+}

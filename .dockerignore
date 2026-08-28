@@ -1,0 +1,54 @@
+# Build context: ALLOWLIST, not blocklist.
+#
+# Everything is excluded, then the seven inputs the image is built from are
+# re-admitted. A blocklist has to be updated every time the repository gains a
+# directory, and the failure mode of forgetting is silent: the new directory is
+# uploaded to the build daemon and cached there. With an allowlist the failure
+# mode is a build error naming the missing path, which is the direction a
+# security-relevant default should fail.
+#
+# What "excluded" buys: nothing that is not listed below is ever sent to the
+# builder, so it cannot land in a layer, in the build cache, or on a remote
+# builder host. That covers the local .env, editor scratch directories, an
+# unrelated git worktree sitting under the repo, node_modules, test fixtures and
+# every credential-shaped file this tree can accumulate.
+#
+# `dist/` is excluded too, deliberately: the image compiles from src/ in its own
+# build stage, so a stale or hand-edited dist/ on the builder's disk can never
+# become the code that runs in the container.
+#
+# Do NOT remove tastytrade-llms-txt-docs. Several static MCP resources read
+# markdown out of that directory with readFileSync at module load, so the
+# server crashes on startup without it. See the Dockerfile.
+
+# 1. Deny everything.
+*
+
+# 2. Re-admit exactly the build inputs.
+#
+#    package.json + package-lock.json  reproducible install (and the runtime
+#                                      version read by src/version.ts)
+#    tsconfig.json + src               the TypeScript build
+#    tastytrade-llms-txt-docs          RUNTIME dependency (see above)
+#    LICENSE                           shipped in the runtime image. MIT requires
+#                                      the notice to be included in all copies,
+#                                      and a published image is one.
+!package.json
+!package-lock.json
+!tsconfig.json
+!src
+!tastytrade-llms-txt-docs
+!LICENSE
+
+# 3. Re-deny anything env-shaped or VCS-shaped that could be nested inside an
+#    admitted tree. Secrets are supplied at run time with --env-file or -e,
+#    never copied into a layer, and never uploaded to a builder. The `**/`
+#    prefix matters: a bare `.env*` is anchored at the context root and would
+#    not match a nested one.
+**/.env
+**/.env.*
+**/.git
+**/.gitignore
+**/node_modules
+**/*.tsbuildinfo
+**/.DS_Store

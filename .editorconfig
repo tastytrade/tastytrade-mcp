@@ -1,0 +1,37 @@
+# EditorConfig — https://editorconfig.org
+#
+# This file exists to make an editor agree with Prettier, not to hold a second
+# opinion next to it. Every value below mirrors the .prettierrc.json setting it
+# corresponds to:
+#
+#   indent_style = space   <-  useTabs: false      (Prettier's default)
+#   indent_size  = 2       <-  tabWidth: 2
+#   max_line_length = 80   <-  printWidth: 80
+#   end_of_line  = lf      <-  endOfLine: "lf"     (Prettier's default)
+#
+# Prettier is the enforcing side: ./build.sh stage 2 runs `prettier --check` and
+# fails the build on an unformatted file, and an explicit .prettierrc.json always
+# wins over this file. So if the two ever disagree, this file is the one that is
+# wrong — change it in the same commit that changes .prettierrc.json, and run
+# `npm run format` if anything drifted.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 80
+
+[*.md]
+# Prettier runs with `proseWrap: "preserve"`, so it never re-wraps prose. An
+# editor that hard-wrapped Markdown at 80 would therefore reflow documents the
+# gate is perfectly happy with — including the README's wide tables, which stop
+# being tables once a line is broken.
+max_line_length = off
+# Two trailing spaces are a Markdown hard line break, and Prettier keeps them.
+# Stripping them on save silently changes rendered output.
+trim_trailing_whitespace = false

@@ -1,0 +1,41 @@
+# gitleaks configuration.
+#
+# The tree is expected to scan clean, so that a result of "0 leaks" carries
+# meaning rather than being permanently noisy.
+#
+#   gitleaks detect --config .gitleaks.toml --no-banner --redact
+#   gitleaks dir .  --config .gitleaks.toml --no-banner --redact
+#
+# ## Writing test fixtures that look like credentials
+#
+# Several suites need values shaped like real credentials — the redaction tests
+# in test/safety/errors.test.ts and test/e2e/errors.test.ts assert that a client
+# secret, refresh token or bearer value never survives into an error envelope,
+# and the redaction regexes carry deliberate length floors (Bearer >= 8 token
+# characters, Basic >= 16) so ordinary prose like "the bearer token expired" is
+# left intact.
+#
+# Satisfy the length floor WITHOUT the entropy: write
+# `cs_live_NOT_A_REAL_CLIENT_SECRET_FIXTURE_0000`, not a random hex string. It
+# exercises exactly the same code path, it is self-documenting to a reader, and
+# it does not trip the scanner — so this allowlist does not have to grow every
+# time a test is added. Random-looking fixtures were converted to this
+# convention rather than allowlisted one by one.
+#
+# The single entry below matches an exact literal rather than a file path. That
+# distinction matters: allowlisting a path would hide a real credential
+# committed to the same file.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "A placeholder in tastytrade's own published API documentation"
+
+regexes = [
+  # tastytrade-llms-txt-docs/docs/open-api-spec/accounts-and-customers.md
+  # The base64 decodes to the literal string "test_token_example", and it is
+  # truncated with an ellipsis in the source. Vendored third-party
+  # documentation, so it is not ours to rewrite.
+  '''dGVzdF90b2tlbl9leGFtcGxl''',
+]

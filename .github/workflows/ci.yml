@@ -1,0 +1,163 @@
+name: CI
+
+# `push` is scoped to the default branch; every other branch is covered by
+# `pull_request`.
+#
+# Running on unscoped `push` AND `pull_request` meant a same-repo branch with an
+# open PR got TWO identical runs — observed on release-prep: two quality gates
+# and two multi-arch Docker builds for one commit, roughly doubling the cost of
+# the slowest job in the repo. The `concurrency` block below did not help,
+# because it keys on `pull_request.number || github.ref`, so the push run and
+# the PR run land in different groups and neither cancels the other.
+#
+# Both of the original goals survive. Fork PRs still run, because
+# `pull_request` is the event that fires for them and it is unrestricted here.
+# Merge commits on the default branch still run, via `push`.
+#
+# The one case deliberately given up: pushing a branch with NO open pull request
+# now runs nothing. That is the standard trade, and CI starts the moment a PR is
+# opened — a draft PR is enough.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Least privilege: the gate only reads the tree. It never comments, pushes, or
+# publishes, so it needs nothing beyond `contents: read`.
+permissions:
+  contents: read
+
+# Superseded runs on the same ref are pointless — cancel them.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Quality gate (./build.sh)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # `persist-credentials: false` keeps the GITHUB_TOKEN out of
+      # .git/config. This job runs a full `npm ci` and then a Jest battery, so
+      # every dependency install script and every test process would otherwise
+      # inherit a readable token from the checkout. On a fork `pull_request`
+      # that token is read-only, which is the reason this is hygiene rather
+      # than a vulnerability — but nothing here pushes, so there is no cost.
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # `.node-version` pins the major (22). Reading it here keeps CI and
+      # local development on one source of truth instead of hardcoding the
+      # version in a second place that then drifts.
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      # An explicit install so a lockfile that is out of sync with
+      # package.json fails here, with an obvious message, before the gate
+      # starts. build.sh runs `npm ci` again as its own stage 1: that
+      # duplication is intentional, because CI must invoke build.sh with no
+      # flags at all so it cannot silently diverge from the script
+      # contributors run locally.
+      - name: Install dependencies
+        run: npm ci
+
+      # build.sh's secret-scan stage SKIPS when gitleaks is absent, so that a
+      # contributor without it installed is never blocked. Installing it here is
+      # what turns that stage into an enforced check instead of a permanent
+      # skip — and the skip is silent, so a missing install reads as a pass.
+      #
+      # PINNED AND CHECKSUM-VERIFIED. This binary decides whether the secret
+      # gate passes, and it is fetched over the network at build time from a
+      # third party. A release asset can be replaced, a tag can be re-pointed,
+      # and a proxy can answer for github.com; without a checksum, any of those
+      # silently substitutes the judge. `sha256sum -c` exits non-zero on a
+      # mismatch and `set -euo pipefail` turns that into a failed job, so the
+      # only two outcomes are "the expected binary" and "a red build".
+      #
+      # THIS BLOCK IS DUPLICATED, BYTE FOR BYTE, IN BOTH
+      # .github/workflows/ci.yml AND .github/workflows/release.yml (gate job) —
+      # a composite action would have to live outside .github/workflows/. Bump
+      # the version in BOTH, and take the digest from that release's own
+      # gitleaks_<version>_checksums.txt, never from a third-party mirror.
+      - name: Install gitleaks (pinned, checksum-verified)
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --retry 3 --retry-all-errors -o /tmp/gitleaks.tar.gz "$url"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" /tmp/gitleaks.tar.gz | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 0755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version | grep -qF "$GITLEAKS_VERSION"
+
+      # ---------------------------------------------------------------------
+      # RUN build.sh BARE. NEVER PIPE IT.
+      #
+      # A shell pipeline exits with the status of the LAST command in the
+      # pipeline, so `./build.sh | tee build.log` reports SUCCESS even when
+      # the gate FAILS — every stage failure is swallowed and CI goes green on
+      # broken code. `| tail`, `| grep`, and `| cat` have the exact same
+      # effect. Do not "just capture the log" by adding a pipe here; if output
+      # capture is ever genuinely needed, use a redirect (`> build.log 2>&1`)
+      # or process substitution, both of which preserve the exit status.
+      #
+      # build.sh itself runs, in order and failing fast: npm ci, prettier
+      # --check, eslint, tsc --noEmit, tsc build, jest + coverage thresholds,
+      # the integration tooling's offline self-test, npm audit (fails on
+      # HIGH/CRITICAL), and a gitleaks secret scan. Nine stages, all hermetic —
+      # no credentials, no network beyond the registry install and the gitleaks
+      # download above.
+      #
+      # REPO_IS_FORK is the one thing the gate cannot work out for itself.
+      # The test suite cross-checks the repository slug that the
+      # tracked files declare against $GITHUB_REPOSITORY, which is how a rename
+      # that left a workflow guard or a clone URL behind turns CI red. A fork
+      # legitimately has a different slug, so that comparison has to be skipped
+      # there — and only the event payload knows. Absent, the test assumes
+      # upstream and enforces: fail-closed, in line with the rest of this gate.
+      # ---------------------------------------------------------------------
+      - name: Quality gate
+        env:
+          REPO_IS_FORK: ${{ github.event.repository.fork }}
+        run: ./build.sh
+
+  docker:
+    name: Docker image (linux/amd64 + linux/arm64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # QEMU provides the arm64 emulation that lets one amd64 runner build
+      # both published architectures.
+      #
+      # Pinned by commit SHA, not by major tag — see release.yml, which pins the
+      # same actions for the job that actually holds packages:write. Kept
+      # identical here so there is one rule ("every action is pinned by digest,
+      # first-party included") rather than a per-job exception nobody can
+      # remember.
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      # Build only — this job proves the Dockerfile still builds for both
+      # architectures. It never pushes and needs no registry credentials.
+      - name: Build image (no push)
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false

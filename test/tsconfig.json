@@ -1,0 +1,21 @@
+{
+  // TypeScript config for the test tree, used by ts-jest only.
+  //
+  // The production tsconfig.json sets `rootDir: "./src"` so the build emits a
+  // clean dist/ tree. That has a side effect: any .ts outside src/ becomes an
+  // out-of-rootDir program input (TS6059), which makes it impossible for one
+  // test file to import another. ts-jest normally suppresses TS6059, but its
+  // ESM path throws raw diagnostics without applying the ignore list — and this
+  // repo runs Jest in ESM mode. The failure mode is nasty: `npx jest` passes
+  // (non-ESM path filters the code) while `npm test` and ./build.sh fail.
+  //
+  // Widening rootDir to the repository root fixes it without touching the
+  // production config. Safe because `noEmit` is true here: rootDir only governs
+  // output layout, and this config never emits.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["../src/**/*", "**/*"]
+}

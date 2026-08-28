@@ -1,0 +1,177 @@
+{
+  "items": [
+    {
+      "underlying-symbol": "AAPL",
+      "root-symbol": "AAPL",
+      "option-chain-type": "Standard",
+      "shares-per-contract": 100,
+      "tick-sizes": [
+        {
+          "threshold": "3.0",
+          "value": "0.01"
+        },
+        {
+          "value": "0.05"
+        }
+      ],
+      "deliverables": [
+        {
+          "id": 259225,
+          "amount": "100.0",
+          "deliverable-type": "Shares",
+          "description": "100 shares of AAPL",
+          "instrument-type": "Equity",
+          "percent": "100",
+          "root-symbol": "AAPL",
+          "symbol": "AAPL"
+        }
+      ],
+      "expirations": [
+        {
+          "expiration-type": "Weekly",
+          "expiration-date": "2026-06-12",
+          "days-to-expiration": 0,
+          "settlement-type": "PM",
+          "strikes": [
+            {
+              "strike-price": "110.0",
+              "call": "AAPL  260612C00110000",
+              "call-streamer-symbol": ".AAPL260612C110",
+              "put": "AAPL  260612P00110000",
+              "put-streamer-symbol": ".AAPL260612P110"
+            },
+            {
+              "strike-price": "120.0",
+              "call": "AAPL  260612C00120000",
+              "call-streamer-symbol": ".AAPL260612C120",
+              "put": "AAPL  260612P00120000",
+              "put-streamer-symbol": ".AAPL260612P120"
+            },
+            {
+              "strike-price": "125.0",
+              "call": "AAPL  260612C00125000",
+              "call-streamer-symbol": ".AAPL260612C125",
+              "put": "AAPL  260612P00125000",
+              "put-streamer-symbol": ".AAPL260612P125"
+            },
+            {
+              "strike-price": "130.0",
+              "call": "AAPL  260612C00130000",
+              "call-streamer-symbol": ".AAPL260612C130",
+              "put": "AAPL  260612P00130000",
+              "put-streamer-symbol": ".AAPL260612P130"
+            }
+          ]
+        },
+        {
+          "expiration-type": "Weekly",
+          "expiration-date": "2026-06-15",
+          "days-to-expiration": 3,
+          "settlement-type": "PM",
+          "strikes": [
+            {
+              "strike-price": "250.0",
+              "call": "AAPL  260615C00250000",
+              "call-streamer-symbol": ".AAPL260615C250",
+              "put": "AAPL  260615P00250000",
+              "put-streamer-symbol": ".AAPL260615P250"
+            },
+            {
+              "strike-price": "255.0",
+              "call": "AAPL  260615C00255000",
+              "call-streamer-symbol": ".AAPL260615C255",
+              "put": "AAPL  260615P00255000",
+              "put-streamer-symbol": ".AAPL260615P255"
+            },
+            {
+              "strike-price": "260.0",
+              "call": "AAPL  260615C00260000",
+              "call-streamer-symbol": ".AAPL260615C260",
+              "put": "AAPL  260615P00260000",
+              "put-streamer-symbol": ".AAPL260615P260"
+            },
+            {
+              "strike-price": "265.0",
+              "call": "AAPL  260615C00265000",
+              "call-streamer-symbol": ".AAPL260615C265",
+              "put": "AAPL  260615P00265000",
+              "put-streamer-symbol": ".AAPL260615P265"
+            }
+          ]
+        },
+        {
+          "expiration-type": "Weekly",
+          "expiration-date": "2026-06-17",
+          "days-to-expiration": 5,
+          "settlement-type": "PM",
+          "strikes": [
+            {
+              "strike-price": "230.0",
+              "call": "AAPL  260617C00230000",
+              "call-streamer-symbol": ".AAPL260617C230",
+              "put": "AAPL  260617P00230000",
+              "put-streamer-symbol": ".AAPL260617P230"
+            },
+            {
+              "strike-price": "235.0",
+              "call": "AAPL  260617C00235000",
+              "call-streamer-symbol": ".AAPL260617C235",
+              "put": "AAPL  260617P00235000",
+              "put-streamer-symbol": ".AAPL260617P235"
+            },
+            {
+              "strike-price": "240.0",
+              "call": "AAPL  260617C00240000",
+              "call-streamer-symbol": ".AAPL260617C240",
+              "put": "AAPL  260617P00240000",
+              "put-streamer-symbol": ".AAPL260617P240"
+            },
+            {
+              "strike-price": "245.0",
+              "call": "AAPL  260617C00245000",
+              "call-streamer-symbol": ".AAPL260617C245",
+              "put": "AAPL  260617P00245000",
+              "put-streamer-symbol": ".AAPL260617P245"
+            }
+          ]
+        },
+        {
+          "expiration-type": "Regular",
+          "expiration-date": "2026-06-18",
+          "days-to-expiration": 6,
+          "settlement-type": "PM",
+          "strikes": [
+            {
+              "strike-price": "5.0",
+              "call": "AAPL  260618C00005000",
+              "call-streamer-symbol": ".AAPL260618C5",
+              "put": "AAPL  260618P00005000",
+              "put-streamer-symbol": ".AAPL260618P5"
+            },
+            {
+              "strike-price": "10.0",
+              "call": "AAPL  260618C00010000",
+              "call-streamer-symbol": ".AAPL260618C10",
+              "put": "AAPL  260618P00010000",
+              "put-streamer-symbol": ".AAPL260618P10"
+            },
+            {
+              "strike-price": "15.0",
+              "call": "AAPL  260618C00015000",
+              "call-streamer-symbol": ".AAPL260618C15",
+              "put": "AAPL  260618P00015000",
+              "put-streamer-symbol": ".AAPL260618P15"
+            },
+            {
+              "strike-price": "20.0",
+              "call": "AAPL  260618C00020000",
+              "call-streamer-symbol": ".AAPL260618C20",
+              "put": "AAPL  260618P00020000",
+              "put-streamer-symbol": ".AAPL260618P20"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

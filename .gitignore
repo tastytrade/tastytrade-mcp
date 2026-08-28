@@ -1,0 +1,43 @@
+/node_modules
+/.env
+.mcp.json
+.DS_Store
+/coverage
+
+# Compiler output. `tsc` regenerates it from src/ in one step (`npm run build`,
+# and stage 5 of ./build.sh), so tracking it added a fifth of the repository in
+# files no human reads, a review diff nobody can review, and a second source of
+# truth that goes stale the moment somebody edits src/ without rebuilding.
+#
+# Nothing in the repository needs it committed: the Docker image compiles it in
+# its own build stage, and ./build.sh builds before it tests. `files: ["dist",
+# …]` in package.json describes the PUBLISHED TARBALL, not version control — so
+# a release must compile before `npm pack` / `npm publish` runs. Run
+# `npm run build` after a fresh clone.
+/dist
+
+# Local-only developer tooling (live integration harness, scratch, etc.) —
+# requires real sandbox OAuth creds to run; not part of the shipped server.
+/dev
+
+# Env variants (root /.env above stays ignored; .env.sample stays tracked)
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor / IDE
+.idea/
+.vscode/
+
+# OS junk
+Thumbs.db
+*.swp
+*.swo
+
+# TypeScript incremental build cache
+*.tsbuildinfo

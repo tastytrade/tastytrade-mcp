@@ -1,0 +1,10 @@
+{
+  "long-equity-initial": "1.0",
+  "long-equity-maintenance": "1.0",
+  "naked-option-floor": "251.0",
+  "naked-option-minimum": "1.0",
+  "naked-option-standard": "1.0",
+  "short-equity-initial": "1.0",
+  "short-equity-maintenance": "1.0",
+  "underlying-symbol": "AAPL"
+}

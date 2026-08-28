@@ -1,0 +1,305 @@
+{
+  "futures": [
+    {
+      "symbol": "/ESM6",
+      "root-symbol": "/ES",
+      "streamer-symbol": "/ESM26:XCME",
+      "expiration-date": "2026-06-18",
+      "days-to-expiration": 6,
+      "active-month": true,
+      "next-active-month": false,
+      "stops-trading-at": "2026-06-18T13:30:00.000+00:00",
+      "expires-at": "2026-06-18T13:30:00.000+00:00"
+    },
+    {
+      "symbol": "/ESU6",
+      "root-symbol": "/ES",
+      "streamer-symbol": "/ESU26:XCME",
+      "expiration-date": "2026-09-18",
+      "days-to-expiration": 98,
+      "active-month": false,
+      "next-active-month": true,
+      "stops-trading-at": "2026-09-18T13:30:00.000+00:00",
+      "expires-at": "2026-09-18T13:30:00.000+00:00"
+    },
+    {
+      "symbol": "/ESZ6",
+      "root-symbol": "/ES",
+      "streamer-symbol": "/ESZ26:XCME",
+      "expiration-date": "2026-12-18",
+      "days-to-expiration": 189,
+      "active-month": false,
+      "next-active-month": false,
+      "stops-trading-at": "2026-12-18T14:30:00.000+00:00",
+      "expires-at": "2026-12-18T14:30:00.000+00:00"
+    },
+    {
+      "symbol": "/ESH7",
+      "root-symbol": "/ES",
+      "streamer-symbol": "/ESH27:XCME",
+      "expiration-date": "2027-03-19",
+      "days-to-expiration": 280,
+      "active-month": false,
+      "next-active-month": false,
+      "stops-trading-at": "2027-03-19T13:30:00.000+00:00",
+      "expires-at": "2027-03-19T13:30:00.000+00:00"
+    }
+  ],
+  "option-chains": [
+    {
+      "underlying-symbol": "/ES",
+      "root-symbol": "/ES",
+      "exercise-style": "American",
+      "expirations": [
+        {
+          "underlying-symbol": "/ESZ6",
+          "root-symbol": "/ES",
+          "option-root-symbol": "ES",
+          "option-contract-symbol": "ESZ6",
+          "asset": "ES",
+          "expiration-date": "2026-12-18",
+          "days-to-expiration": 189,
+          "expiration-type": "Regular",
+          "settlement-type": "AM",
+          "notional-value": "0.5",
+          "display-factor": "0.01",
+          "strike-factor": "1.0",
+          "stops-trading-at": "2026-12-18T14:30:00.000+00:00",
+          "expires-at": "2026-12-18T14:30:00.000+00:00",
+          "tick-sizes": [
+            {
+              "threshold": "5.0",
+              "value": "0.05"
+            },
+            {
+              "threshold": "20.0",
+              "value": "0.1"
+            },
+            {
+              "threshold": "100.0",
+              "value": "0.25"
+            },
+            {
+              "value": "0.5"
+            }
+          ],
+          "strikes": [
+            {
+              "strike-price": "6300.0",
+              "call": "./ESZ6 ESZ6  261218C6300",
+              "put": "./ESZ6 ESZ6  261218P6300"
+            },
+            {
+              "strike-price": "4300.0",
+              "call": "./ESZ6 ESZ6  261218C4300",
+              "put": "./ESZ6 ESZ6  261218P4300"
+            },
+            {
+              "strike-price": "100.0",
+              "call": "./ESZ6 ESZ6  261218C100",
+              "call-streamer-symbol": "./ESZ26C100:XCME",
+              "put": "./ESZ6 ESZ6  261218P100",
+              "put-streamer-symbol": "./ESZ26P100:XCME"
+            },
+            {
+              "strike-price": "800.0",
+              "call": "./ESZ6 ESZ6  261218C800",
+              "call-streamer-symbol": "./ESZ26C800:XCME",
+              "put": "./ESZ6 ESZ6  261218P800",
+              "put-streamer-symbol": "./ESZ26P800:XCME"
+            }
+          ]
+        },
+        {
+          "underlying-symbol": "/ESU6",
+          "root-symbol": "/ES",
+          "option-root-symbol": "E1A",
+          "option-contract-symbol": "E1AN6",
+          "asset": "E1A",
+          "expiration-date": "2026-07-06",
+          "days-to-expiration": 24,
+          "expiration-type": "Weekly",
+          "settlement-type": "PM",
+          "notional-value": "0.5",
+          "display-factor": "0.01",
+          "strike-factor": "1.0",
+          "stops-trading-at": "2026-07-06T20:00:00.000+00:00",
+          "expires-at": "2026-07-06T20:00:00.000+00:00",
+          "tick-sizes": [
+            {
+              "threshold": "5.0",
+              "value": "0.05"
+            },
+            {
+              "threshold": "20.0",
+              "value": "0.1"
+            },
+            {
+              "threshold": "100.0",
+              "value": "0.25"
+            },
+            {
+              "value": "0.5"
+            }
+          ],
+          "strikes": [
+            {
+              "strike-price": "6260.0",
+              "call": "./ESU6 E1AN6 260706C6260",
+              "call-streamer-symbol": "./E1AN26C6260:XCME",
+              "put": "./ESU6 E1AN6 260706P6260",
+              "put-streamer-symbol": "./E1AN26P6260:XCME"
+            },
+            {
+              "strike-price": "100.0",
+              "call": "./ESU6 E1AN6 260706C100",
+              "call-streamer-symbol": "./E1AN26C100:XCME",
+              "put": "./ESU6 E1AN6 260706P100",
+              "put-streamer-symbol": "./E1AN26P100:XCME"
+            },
+            {
+              "strike-price": "2100.0",
+              "call": "./ESU6 E1AN6 260706C2100",
+              "call-streamer-symbol": "./E1AN26C2100:XCME",
+              "put": "./ESU6 E1AN6 260706P2100",
+              "put-streamer-symbol": "./E1AN26P2100:XCME"
+            },
+            {
+              "strike-price": "4500.0",
+              "call": "./ESU6 E1AN6 260706C4500",
+              "call-streamer-symbol": "./E1AN26C4500:XCME",
+              "put": "./ESU6 E1AN6 260706P4500",
+              "put-streamer-symbol": "./E1AN26P4500:XCME"
+            }
+          ]
+        },
+        {
+          "underlying-symbol": "/ESZ6",
+          "root-symbol": "/ES",
+          "option-root-symbol": "EW3",
+          "option-contract-symbol": "EW3U6",
+          "asset": "EW3",
+          "expiration-date": "2026-09-18",
+          "days-to-expiration": 98,
+          "expiration-type": "Weekly",
+          "settlement-type": "PM",
+          "notional-value": "0.5",
+          "display-factor": "0.01",
+          "strike-factor": "1.0",
+          "stops-trading-at": "2026-09-18T20:00:00.000+00:00",
+          "expires-at": "2026-09-18T20:00:00.000+00:00",
+          "tick-sizes": [
+            {
+              "threshold": "5.0",
+              "value": "0.05"
+            },
+            {
+              "threshold": "20.0",
+              "value": "0.1"
+            },
+            {
+              "threshold": "100.0",
+              "value": "0.25"
+            },
+            {
+              "value": "0.5"
+            }
+          ],
+          "strikes": [
+            {
+              "strike-price": "9100.0",
+              "call": "./ESZ6 EW3U6 260918C9100",
+              "call-streamer-symbol": "./EW3U26C9100:XCME",
+              "put": "./ESZ6 EW3U6 260918P9100",
+              "put-streamer-symbol": "./EW3U26P9100:XCME"
+            },
+            {
+              "strike-price": "9200.0",
+              "call": "./ESZ6 EW3U6 260918C9200",
+              "call-streamer-symbol": "./EW3U26C9200:XCME",
+              "put": "./ESZ6 EW3U6 260918P9200",
+              "put-streamer-symbol": "./EW3U26P9200:XCME"
+            },
+            {
+              "strike-price": "9300.0",
+              "call": "./ESZ6 EW3U6 260918C9300",
+              "call-streamer-symbol": "./EW3U26C9300:XCME",
+              "put": "./ESZ6 EW3U6 260918P9300",
+              "put-streamer-symbol": "./EW3U26P9300:XCME"
+            },
+            {
+              "strike-price": "9400.0",
+              "call": "./ESZ6 EW3U6 260918C9400",
+              "call-streamer-symbol": "./EW3U26C9400:XCME",
+              "put": "./ESZ6 EW3U6 260918P9400",
+              "put-streamer-symbol": "./EW3U26P9400:XCME"
+            }
+          ]
+        },
+        {
+          "underlying-symbol": "/ESU6",
+          "root-symbol": "/ES",
+          "option-root-symbol": "E4A",
+          "option-contract-symbol": "E4AM6",
+          "asset": "E4A",
+          "expiration-date": "2026-06-22",
+          "days-to-expiration": 10,
+          "expiration-type": "Weekly",
+          "settlement-type": "PM",
+          "notional-value": "0.5",
+          "display-factor": "0.01",
+          "strike-factor": "1.0",
+          "stops-trading-at": "2026-06-22T20:00:00.000+00:00",
+          "expires-at": "2026-06-22T20:00:00.000+00:00",
+          "tick-sizes": [
+            {
+              "threshold": "5.0",
+              "value": "0.05"
+            },
+            {
+              "threshold": "20.0",
+              "value": "0.1"
+            },
+            {
+              "threshold": "100.0",
+              "value": "0.25"
+            },
+            {
+              "value": "0.5"
+            }
+          ],
+          "strikes": [
+            {
+              "strike-price": "6490.0",
+              "call": "./ESU6 E4AM6 260622C6490",
+              "call-streamer-symbol": "./E4AM26C6490:XCME",
+              "put": "./ESU6 E4AM6 260622P6490",
+              "put-streamer-symbol": "./E4AM26P6490:XCME"
+            },
+            {
+              "strike-price": "100.0",
+              "call": "./ESU6 E4AM6 260622C100",
+              "call-streamer-symbol": "./E4AM26C100:XCME",
+              "put": "./ESU6 E4AM6 260622P100",
+              "put-streamer-symbol": "./E4AM26P100:XCME"
+            },
+            {
+              "strike-price": "2100.0",
+              "call": "./ESU6 E4AM6 260622C2100",
+              "call-streamer-symbol": "./E4AM26C2100:XCME",
+              "put": "./ESU6 E4AM6 260622P2100",
+              "put-streamer-symbol": "./E4AM26P2100:XCME"
+            },
+            {
+              "strike-price": "4500.0",
+              "call": "./ESU6 E4AM6 260622C4500",
+              "call-streamer-symbol": "./E4AM26C4500:XCME",
+              "put": "./ESU6 E4AM6 260622P4500",
+              "put-streamer-symbol": "./E4AM26P4500:XCME"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
