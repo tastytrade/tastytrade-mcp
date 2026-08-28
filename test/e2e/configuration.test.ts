@@ -399,19 +399,19 @@ describe("read-only mode is enabled only by an affirmative value", () => {
   const FALSY = ["0", "false", "FALSE", "", "  "];
   /**
    * Anything else. These USED to leave the full write surface live — an
-   * operator who wrote `TASTYTRADE_READ_ONLY=yes` got 86 tools and every
+   * operator who wrote `TASTYTRADE_READ_ONLY=yes` got 84 tools and every
    * money-moving path enabled while believing they were off. That is a
    * fail-open on a safety control, so an unrecognised value now enables
    * read-only mode and says so on stderr.
    */
   const UNRECOGNISED = ["yes", "on", "enabled", "Y", "no", "off", "2", "ture"];
 
-  it.each(TRUTHY)("%p enables it: 72 tools, writes refused", async (value) => {
+  it.each(TRUTHY)("%p enables it: 70 tools, writes refused", async (value) => {
     process.env[READ_ONLY_ENV_VAR] = value;
     const h = await quietHarness();
 
     const { tools } = await h.client.listTools();
-    expect(tools).toHaveLength(72);
+    expect(tools).toHaveLength(70);
     const err = await callError(h, "tastytrade_place_order", {
       account_number: "5WX00001",
     });
@@ -423,7 +423,7 @@ describe("read-only mode is enabled only by an affirmative value", () => {
     const h = await quietHarness();
 
     const { tools } = await h.client.listTools();
-    expect(tools).toHaveLength(86);
+    expect(tools).toHaveLength(84);
 
     // The write surface is reachable. place_order still fails — it needs a
     // confirmation token — but with dry_run_required, which proves the call got
@@ -436,13 +436,13 @@ describe("read-only mode is enabled only by an affirmative value", () => {
   });
 
   it.each(UNRECOGNISED)(
-    "%p is unrecognised, so it FAILS CLOSED: 72 tools, writes refused",
+    "%p is unrecognised, so it FAILS CLOSED: 70 tools, writes refused",
     async (value) => {
       process.env[READ_ONLY_ENV_VAR] = value;
       const h = await quietHarness();
 
       const { tools } = await h.client.listTools();
-      expect(tools).toHaveLength(72);
+      expect(tools).toHaveLength(70);
       const err = await callError(h, "tastytrade_place_order", {
         account_number: "5WX00001",
       });
@@ -493,7 +493,7 @@ describe("read-only mode is enabled only by an affirmative value", () => {
     cleanups.push(() => cap.result.close());
 
     const { tools } = await cap.result.client.listTools();
-    expect(tools).toHaveLength(86);
+    expect(tools).toHaveLength(84);
     // Unset is not "unrecognised": the default must be silent.
     expect(cap.stderr.filter((line) => /UNRECOGNISED/.test(line))).toEqual([]);
   });
@@ -506,7 +506,7 @@ describe("read-only mode is enabled only by an affirmative value", () => {
     delete process.env[READ_ONLY_ENV_VAR];
 
     const { tools } = await h.client.listTools();
-    expect(tools).toHaveLength(72);
+    expect(tools).toHaveLength(70);
     const err = await callError(h, "tastytrade_place_order", {
       account_number: "5WX00001",
       legs: [],
@@ -520,12 +520,12 @@ describe("read-only mode is enabled only by an affirmative value", () => {
 // ===========================================================================
 
 describe("read-only mode withholds and refuses all 14 non-read tools", () => {
-  it("advertises exactly 72 tools and hides every write and destructive one", async () => {
+  it("advertises exactly 70 tools and hides every write and destructive one", async () => {
     process.env[READ_ONLY_ENV_VAR] = "1";
     const h = await quietHarness();
 
     const names = (await h.client.listTools()).tools.map((t) => t.name);
-    expect(names).toHaveLength(72);
+    expect(names).toHaveLength(70);
     expect(names.filter((n) => WITHHELD_TOOLS.includes(n))).toEqual([]);
     // Every advertised tool really is in the read bucket.
     expect(
@@ -802,13 +802,13 @@ describe("read-only mode is captured at construction", () => {
   it("cannot be switched OFF by mutating the environment afterwards", async () => {
     process.env[READ_ONLY_ENV_VAR] = "1";
     const h = await quietHarness();
-    expect((await h.client.listTools()).tools).toHaveLength(72);
+    expect((await h.client.listTools()).tools).toHaveLength(70);
 
     // The security-relevant direction: a caller who can influence the process
     // environment mid-session must not be able to unlock the write surface.
     delete process.env[READ_ONLY_ENV_VAR];
 
-    expect((await h.client.listTools()).tools).toHaveLength(72);
+    expect((await h.client.listTools()).tools).toHaveLength(70);
     const err = await callError(h, "tastytrade_place_order", {
       account_number: "5WX00001",
     });
@@ -829,13 +829,13 @@ describe("read-only mode is captured at construction", () => {
         { matcher: "/watchlists", method: "POST", reply: { data: created } },
       ],
     });
-    expect((await h.client.listTools()).tools).toHaveLength(86);
+    expect((await h.client.listTools()).tools).toHaveLength(84);
 
     process.env[READ_ONLY_ENV_VAR] = "1";
 
-    // Still 86, and a write still executes: read-only is a startup decision, so
+    // Still 84, and a write still executes: read-only is a startup decision, so
     // tightening it requires a restart. Documented, not incidental.
-    expect((await h.client.listTools()).tools).toHaveLength(86);
+    expect((await h.client.listTools()).tools).toHaveLength(84);
     expect(
       await callOk(h, "tastytrade_create_watchlist", {
         name: "e2e",
@@ -1355,7 +1355,7 @@ describe("destructive tool descriptions do not undersell the risk", () => {
    *     token and no sanity check, said only "Cancel a working order".
    *
    * WHICH DESCRIPTION THESE ARE: `decorateTool` OVERRIDES a tool's description with
-   * `TOOL_METADATA[name]`'s whenever one exists, and one exists for all 93 tools — so
+   * `TOOL_METADATA[name]`'s whenever one exists, and one exists for all 84 tools — so
    * these are the registry's own strings, NOT what reaches `tools/list`. They are still
    * the definitions a maintainer reads and the fallback if a metadata entry is dropped.
    *

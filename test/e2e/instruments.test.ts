@@ -331,7 +331,7 @@ describe("equity option definitions", () => {
 });
 
 // ===========================================================================
-// Equity option chains: four variants, three genuinely different shapes
+// Equity option chains: three variants, three genuinely different shapes
 // ===========================================================================
 
 describe("equity option chains", () => {
@@ -358,27 +358,6 @@ describe("equity option chains", () => {
     expect(result.items[0]["strike-price"]).toBe("110.0");
     expect(result.items[0]["option-type"]).toBe("C");
     expect(snakeCaseKeys(result)).toEqual([]);
-  });
-
-  it("tastytrade_get_option_chain_full is the canonical name for the same endpoint", async () => {
-    const harness = await boot([
-      {
-        matcher: "/option-chains/AAPL",
-        method: "GET",
-        reply: { data: loadFixture("tastytrade_get_option_chain_full") },
-      },
-    ]);
-
-    const result = (await callOk(harness, "tastytrade_get_option_chain_full", {
-      symbol: "AAPL",
-    })) as { items: Record<string, unknown>[] };
-
-    const req = outbound(harness);
-    expect(req.method).toBe("GET");
-    // Same path as tastytrade_get_option_chain — no `/full` suffix exists.
-    expect(req.url).toBe("/option-chains/AAPL");
-    expect(result.items[0]).toHaveProperty("streamer-symbol");
-    expect(result.items[0]["days-to-expiration"]).toEqual(expect.any(Number));
   });
 
   it("tastytrade_get_option_chain_compact returns symbol lists, not contract objects", async () => {
@@ -471,36 +450,30 @@ describe("equity option chains", () => {
 
     const args = { symbol: "BRK/B" };
     // The option-chain endpoints share a 2 request/second ceiling and this test
-    // walks all five in one millisecond. Reset between them: the subject here is
-    // URL encoding, and a rate refusal would never reach the transport to be
+    // walks all three in one millisecond. Reset between them: the subject here
+    // is URL encoding, and a rate refusal would never reach the transport to be
     // inspected.
     for (const tool of [
       "tastytrade_get_option_chain",
-      "tastytrade_get_option_chain_full",
       "tastytrade_get_option_chain_compact",
       "tastytrade_get_option_chain_nested",
-      "tastytrade_get_option_expirations",
     ]) {
       _resetRateLimitsForTest();
       await callOk(harness, tool, args);
     }
 
-    // Same class of bug as tastytrade_get_instrument above: getOptionChain /
-    // …Compact / …Nested / …Expirations all interpolated the symbol without
-    // encodeURIComponent, so `BRK/B` became two path segments and the variant
-    // suffix landed one level too deep. getFuturesOptionChainFull already
-    // encoded — see the futures-chain test below — and now these match it.
+    // The symbol goes through encodeURIComponent, so `BRK/B` stays one path
+    // segment instead of splitting in two and pushing the variant suffix a
+    // level deeper.
     expect(harness.requests.map((r) => r.url)).toEqual([
-      "/option-chains/BRK%2FB",
       "/option-chains/BRK%2FB",
       "/option-chains/BRK%2FB/compact",
       "/option-chains/BRK%2FB/nested",
-      "/option-chains/BRK%2FB/expirations",
     ]);
     // The symbol is one segment everywhere, so the variant suffix (when there
     // is one) sits at exactly the documented depth.
     expect(harness.requests.map((r) => segments(r.url).length)).toEqual([
-      2, 2, 3, 3, 3,
+      2, 3, 3,
     ]);
   });
 
@@ -516,7 +489,7 @@ describe("equity option chains", () => {
       },
       {
         matcher: "/option-chains/AAPL",
-        reply: { data: loadFixture("tastytrade_get_option_chain_full") },
+        reply: { data: loadFixture("tastytrade_get_option_chain") },
       },
     ]);
 
@@ -526,7 +499,7 @@ describe("equity option chains", () => {
     _resetRateLimitsForTest();
     const full = (await callOk(
       harness,
-      "tastytrade_get_option_chain_full",
+      "tastytrade_get_option_chain",
       args,
     )) as Chain;
     _resetRateLimitsForTest();
@@ -550,46 +523,6 @@ describe("equity option chains", () => {
     expect(Object.keys(compact.items[0])).not.toContain("expirations");
     expect(Object.keys(nested.items[0])).not.toContain("symbols");
     expect(Object.keys(full.items[0])).not.toContain("symbols");
-  });
-
-  it("tastytrade_get_option_expirations GETs an endpoint the API does not document", async () => {
-    const harness = await boot([
-      {
-        matcher: "/option-chains/AAPL/expirations",
-        method: "GET",
-        reply: {
-          data: { items: [{ "expiration-date": "2026-06-12" }] },
-        },
-      },
-    ]);
-
-    const result = (await callOk(harness, "tastytrade_get_option_expirations", {
-      symbol: "AAPL",
-    })) as { items: Array<Record<string, string>> };
-
-    const req = outbound(harness);
-    expect(req.method).toBe("GET");
-    // FINDING (documented): the instruments spec lists exactly three option
-    // chain routes — `/option-chains/{symbol}`, `/compact` and `/nested`. There
-    // is no `/expirations`. The tool nonetheless targets it, there is no
-    // recorded sandbox payload for it (unlike the other three variants), and
-    // The live sweep accepts `not_found` for this tool. This test
-    // pins the request the server actually makes; see the companion test below
-    // for how that 404 surfaces to the agent.
-    expect(req.url).toBe("/option-chains/AAPL/expirations");
-    expect(result.items).toEqual([{ "expiration-date": "2026-06-12" }]);
-  });
-
-  it("tastytrade_get_option_expirations surfaces the live 404 as not_found", async () => {
-    const harness = await boot([
-      { matcher: /\/expirations$/, reply: { status: 404 } },
-    ]);
-
-    const err = await callError(harness, "tastytrade_get_option_expirations", {
-      symbol: "AAPL",
-    });
-    expect(err.code).toBe("not_found");
-    expect(err.retryable).toBe(false);
   });
 });
 

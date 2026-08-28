@@ -1,6 +1,6 @@
 # Recorded API payloads
 
-Nineteen real responses captured from the tastytrade **sandbox** API
+Twenty-one real responses captured from the tastytrade **sandbox** API
 (`api.cert.tastyworks.com`). They exist so the response _shape_ can be checked
 without credentials or a network — the payloads are the reference corpus for
 what the API actually returns, as opposed to what the docs say it returns.
@@ -47,7 +47,7 @@ the scrub fails rather than lands.
 
 ## 2. Long arrays truncated to 4 items
 
-Five option-chain payloads were 45.72 MB combined, one of them 37 MB on its own
+Four option-chain payloads were 43.15 MB combined, one of them 37 MB on its own
 (20,404 strikes). That is roughly a hundred times the size of all the source in
 this repository, and it added seconds to `prettier --check` on every gate run
 and every CI run, forever.
@@ -62,10 +62,9 @@ strike exercises no field the 4th does not.
 | `futures_option_chain_full` | 37.24 MB | 0.01 MB | `items`: 20,404 → 4               |
 | `futures_option_chains`     | 2.83 MB  | 0.01 MB | `expirations[0].strikes`: 153 → 4 |
 | `option_chain`              | 2.59 MB  | 0.00 MB | `items`: 3,704 → 4                |
-| `option_chain_full`         | 2.59 MB  | 0.00 MB | `items`: 3,704 → 4                |
 | `option_chain_nested`       | 0.49 MB  | 0.01 MB | `expirations[0].strikes`: 75 → 4  |
 
-**Total: 45.72 MB → 0.03 MB.** The other 14 payloads were already small and are
+**Total: 43.15 MB → 0.03 MB.** The other 17 payloads were already small and are
 untouched.
 
 If you need a full-volume capture — to load-test a client, or to measure

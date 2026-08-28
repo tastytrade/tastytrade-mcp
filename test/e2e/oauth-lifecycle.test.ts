@@ -980,7 +980,7 @@ describe("through a real tool call", () => {
     // is not a /dry-run is a write, so isUnestablishedWrite said "in doubt",
     // and `tastytrade_get_accounts` — a plain GET, never dispatched — came back
     // with the full "outcome UNKNOWN, do NOT resubmit, reconcile your live
-    // orders" envelope at retryable:false. On every one of the 93 tools, for
+    // orders" envelope at retryable:false. On every one of the 84 tools, for
     // the most ordinary transient failure there is, and the reconcile it
     // prescribed (tastytrade_get_live_orders) needs the same grant.
     tokenResponder = async () => {

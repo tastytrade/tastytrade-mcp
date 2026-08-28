@@ -584,7 +584,6 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   tastytrade_get_quantity_precisions: READ_ONLY,
   tastytrade_get_active_equities: READ_ONLY,
   tastytrade_get_equity_option: READ_ONLY,
-  tastytrade_get_option_chain_full: READ_ONLY,
   tastytrade_get_futures: READ_ONLY,
   tastytrade_get_future: READ_ONLY,
   tastytrade_get_future_products: READ_ONLY,
@@ -657,7 +656,6 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
 
   // Options / Futures chains
   tastytrade_get_option_chain_nested: READ_ONLY,
-  tastytrade_get_option_expirations: READ_ONLY,
   tastytrade_get_futures_option_chains: READ_ONLY,
 };
 
@@ -874,7 +872,7 @@ const RESULT_BOUNDS: BoundedDeepOptions = {
  *
  * `_meta` rather than a payload field because `_meta` is a field the MCP
  * `CallToolResult` already permits and no `outputSchema` constrains — so the
- * facts are machine-readable without editing 86 declared schemas, which is the
+ * facts are machine-readable without editing 84 declared schemas, which is the
  * change that would turn this fix into `-32600` on every call.
  */
 export const PROVENANCE_META_FIELD = "tastytrade/provenance";
@@ -1955,18 +1953,6 @@ function buildInstrumentToolDefs(): Tool[] {
           },
           active: { type: "boolean" },
         },
-        required: ["symbol"],
-      },
-    },
-    {
-      name: "tastytrade_get_option_chain_full",
-      description:
-        "Full option chain at GET /option-chains/{symbol} — complete EquityOption objects. Same endpoint as " +
-        "tastytrade_get_option_chain (kept for backward compat); this is the canonical name. " +
-        "WARNING: huge payload for liquid names. Prefer tastytrade_get_option_chain_compact or _nested.",
-      inputSchema: {
-        type: "object",
-        properties: { symbol: { type: "string" } },
         required: ["symbol"],
       },
     },
@@ -4708,17 +4694,6 @@ export class TastytradeMCPServer {
         },
       },
       {
-        name: "tastytrade_get_option_expirations",
-        description: "Get just the expiration dates for an option chain",
-        inputSchema: {
-          type: "object",
-          properties: {
-            symbol: { type: "string", description: "Underlying symbol" },
-          },
-          required: ["symbol"],
-        },
-      },
-      {
         name: "tastytrade_get_futures_option_chains",
         description:
           "Nested futures-option chain at GET /futures-option-chains/{product_code}/nested. " +
@@ -5592,10 +5567,6 @@ export class TastytradeMCPServer {
         );
       }
 
-      case "tastytrade_get_option_chain_full": {
-        return jsonResult(await this.client.getOptionChainFull(args.symbol));
-      }
-
       case "tastytrade_get_futures": {
         const params: Record<string, unknown> = {};
         if (args.symbol !== undefined) params["symbol"] = args.symbol;
@@ -6133,17 +6104,6 @@ export class TastytradeMCPServer {
             {
               type: "text",
               text: JSON.stringify(nestedChain, null, 2),
-            },
-          ],
-        };
-
-      case "tastytrade_get_option_expirations":
-        const expirations = await this.client.getOptionExpirations(args.symbol);
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(expirations, null, 2),
             },
           ],
         };
