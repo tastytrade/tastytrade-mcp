@@ -1308,8 +1308,8 @@ describe("the library barrel is not an entrypoint", () => {
 
   it("still recognises the entry module when it is launched through a symlink", async () => {
     // Node resolves an ESM specifier to the real path, so `import.meta.url` is
-    // dereferenced while argv[1] is whatever the caller typed. An npm `bin`
-    // shim, a /usr/local/bin link or a container layer makes those two
+    // dereferenced while argv[1] is whatever the caller typed. A
+    // /usr/local/bin link or a container layer makes those two
     // spellings differ, and treating that as "imported" would silently start
     // nothing — the quietest possible failure for an entrypoint.
     const { isEntryModule } = await import("../../src/index.js");
