@@ -23,6 +23,8 @@ point it at production.
 ## Install
 
 ```bash
+git clone https://github.com/tastytrade/tastytrade-mcp.git
+cd tastytrade-mcp
 npm ci
 npm run build
 ```
