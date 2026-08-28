@@ -127,8 +127,8 @@
       "transport": "stdio",
       "runtime": "node >=22",
       "toolSurface": {
-        "tools": 86,
-        "readOnly": 72,
+        "tools": 84,
+        "readOnly": 70,
         "write": 2,
         "destructive": 12,
         "note": "Every destructive tool requires a single-use confirmation token issued by its matching dry_run_* tool, valid for 60 seconds and bound to a hash of the submitted arguments."

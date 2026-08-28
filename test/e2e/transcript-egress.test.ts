@@ -15,7 +15,7 @@
  * post-flight and a test that only exercised `jsonResult` would verify green over the 21
  * sites that never call it. THE ROUTING INVARIANT: the emission-site list is DERIVED
  * from the source at test time and every site must sit where the guard dominates it —
- * deliberately not a count, since this surface has already gone from 93 tools to 86.
+ * deliberately not a count, since this surface has already gone from 93 tools to 84.
  */
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import { readFileSync } from "node:fs";

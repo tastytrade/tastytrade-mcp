@@ -112,7 +112,7 @@ describe("a call naming an account the credential does not hold", () => {
   });
 
   // The list is DERIVED from the advertised schemas, never enumerated: this
-  // surface has already gone from 93 tools to 86, and a literal denominator is
+  // surface has already gone from 93 tools to 84, and a literal denominator is
   // how a stale figure passes a green test.
   it("is refused on every tool whose schema declares an account", async () => {
     const h = await harness();
@@ -196,7 +196,7 @@ describe("a call naming an account the credential does not hold", () => {
   it("reads the account fields off the bag, not off the schema", async () => {
     // `tastytrade_get_quote_snapshot` declares no account at all. An unheld
     // account number sent to it is still refused: the control must not depend
-    // on 86 input schemas being right about which fields reach the wire.
+    // on 84 input schemas being right about which fields reach the wire.
     const h = await harness();
     try {
       const err = await callError(h, "tastytrade_get_quote_snapshot", {

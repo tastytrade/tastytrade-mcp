@@ -42,7 +42,7 @@ beforeEach(() => {
  * names a property that does not exist, is invisible to the type checker and fatal at
  * runtime.
  *
- * The expected counts (86 tools; 72 read / 12 destructive / 2 write) are asserted as
+ * The expected counts (84 tools; 70 read / 12 destructive / 2 write) are asserted as
  * literals on purpose. They are the shipped contract, so adding or reclassifying a
  * tool should require touching this file deliberately — a self-derived count would
  * agree with any regression.
@@ -54,9 +54,9 @@ beforeEach(() => {
 const READ_ONLY_ENV_VAR = "TASTYTRADE_READ_ONLY";
 
 /** Total tools this server advertises. */
-const EXPECTED_TOOL_COUNT = 86;
+const EXPECTED_TOOL_COUNT = 84;
 /** Rate-limit bucket split, by annotation. */
-const EXPECTED_READ_TOOLS = 72;
+const EXPECTED_READ_TOOLS = 70;
 const EXPECTED_DESTRUCTIVE_TOOLS = 12;
 const EXPECTED_WRITE_TOOLS = 2;
 
@@ -288,7 +288,7 @@ function enumSites(node: unknown, path: string, acc: EnumSite[]): EnumSite[] {
 }
 
 // Read-only mode is read from the environment at construction and withholds 14
-// of the 86 tools, so a leaked env var from another suite would turn every
+// of the 84 tools, so a leaked env var from another suite would turn every
 // count here into a confusing failure. Neutralise it for this file.
 let savedReadOnly: string | undefined;
 beforeAll(() => {

@@ -466,17 +466,14 @@ describe("settlement-type is an open string, not a guessed enum", () => {
   // were inferred from the ones that happened to be observed. An enum narrower
   // than reality turns a good payload into MCP -32602 at the client. A recorded
   // payload cannot catch this — it only ever contains values that DID validate.
-  it.each(["tastytrade_get_option_chain", "tastytrade_get_option_chain_full"])(
-    "%s: option-chain settlement-type carries no enum",
-    (tool) => {
-      const prop = get(
-        byName[tool].outputSchema,
-        "properties.items.items.properties.settlement-type",
-      );
-      expect(prop.type).toBe("string");
-      expect(prop.enum).toBeUndefined();
-    },
-  );
+  it("get_option_chain: option-chain settlement-type carries no enum", () => {
+    const prop = get(
+      byName["tastytrade_get_option_chain"].outputSchema,
+      "properties.items.items.properties.settlement-type",
+    );
+    expect(prop.type).toBe("string");
+    expect(prop.enum).toBeUndefined();
+  });
 
   it("get_equity_definition settlement-type carries no enum", () => {
     expect(

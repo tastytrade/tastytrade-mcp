@@ -121,7 +121,7 @@ export function readAccountSet(payload: unknown): AccountSetReading {
  *
  * Read off the BAG, not off the tool's input schema, and that is the load-bearing
  * choice in this module. Deriving the fields to check from each tool's schema
- * would make 86 schemas part of the control: the very defect this fix also
+ * would make 84 schemas part of the control: the very defect this fix also
  * closes was a field (`account_numbers`) that reached the wire from a tool whose
  * schema never declared it, through a mapper shared with a tool whose schema
  * did. A caller that sends an account number under one of these names is

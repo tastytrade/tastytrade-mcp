@@ -115,7 +115,7 @@ Exit codes:
 
 ## Tool surface
 
-**86 tools**: 72 read-only, 2 write, 12 destructive. The server also exposes MCP
+**84 tools**: 70 read-only, 2 write, 12 destructive. The server also exposes MCP
 Resources (documentation bundles and computed account views) and Prompts
 (pre-composed tool-call plans).
 
