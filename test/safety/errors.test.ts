@@ -500,10 +500,45 @@ describe("normalizeKeyName is linear in key length", () => {
     expect(Date.now() - startedAt).toBeLessThan(1_000);
   }, 120_000);
 
-  it("costs ~2x, not ~4x, for twice the key length", () => {
-    const at100k = cheapestMs(() => isSecretKey("A".repeat(100_000)));
-    const at200k = cheapestMs(() => isSecretKey("A".repeat(200_000)));
-    expect(at200k / at100k).toBeLessThan(3.0);
+  // A ratio is only as stable as the noisier of its two samples, and at 100,000
+  // characters the whole call costs ~2 ms — small enough that one scheduling
+  // hiccup on a shared runner doubles it. Doubling the length predicts ~2 and
+  // measures 1.9-2.3 unloaded, so a bound of 3.0 left barely 1.3x of headroom
+  // and went red at 3.62 on CI.
+  //
+  // Two changes make the same claim without that fragility. Span 16x instead of
+  // 2x, so linear predicts ~16 while the quadratic implementation this replaced
+  // predicts ~256 and the bound can sit far from both. And note which direction
+  // noise pushes: the numerator is now tens of milliseconds, while the
+  // denominator is still the same ~2 ms sample as before. That is safe rather
+  // than incidental — noise only ever ADDS time, so a slow denominator can only
+  // make the ratio smaller and the assertion pass. The bound is therefore set
+  // by how large a genuine regression makes the ratio, not by how precisely the
+  // small sample can be timed. Do not tighten it toward the measured ~18 on the
+  // assumption that both samples are now precise; the denominator is not.
+  it("grows with the key length, not with its square", () => {
+    const at100k = cheapestMs(() => isSecretKey("A".repeat(100_000)), 2_000);
+
+    // Asserted before the larger sample is taken, so a quadratic scan fails
+    // here in seconds with a legible message rather than spending twenty
+    // minutes on 1,600,000 characters and reporting a timeout. This one takes
+    // ~2 ms, so the ceiling is 250x above it; the quadratic version took 4.8 s
+    // at this size, so the ceiling is ~10x below that. The wide side is the
+    // one that matters for flakiness.
+    expect(at100k).toBeLessThan(500);
+
+    const at1600k = cheapestMs(() => isSecretKey("A".repeat(1_600_000)), 4_000);
+
+    // Measured ~18 for this 16x span, against ~16 predicted for a linear scan
+    // and ~256 for a quadratic one. 48 is 2.6x above what is observed and 5x
+    // below what a regression would produce.
+    expect(at1600k / at100k).toBeLessThan(48);
+
+    // An absolute ceiling as well, because it does not depend on the ratio
+    // holding. Measured ~37 ms, so this sits ~54x above what a linear scan
+    // costs. The quadratic version took 4.8 s at 100,000 characters, which
+    // scales to ~20 minutes at 1,600,000 — about 600x this bound.
+    expect(at1600k).toBeLessThan(2_000);
   }, 180_000);
 });
 
