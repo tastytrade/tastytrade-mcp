@@ -19,24 +19,6 @@
       "transport": {
         "type": "stdio"
       },
-      "runtimeArguments": [
-        {
-          "type": "positional",
-          "value": "run",
-          "valueHint": "run"
-        },
-        {
-          "type": "positional",
-          "value": "-i",
-          "valueHint": "-i",
-          "description": "Required. This is a stdio MCP server; without -i Docker leaves stdin detached, the transport reads EOF immediately, and the container exits with no output."
-        },
-        {
-          "type": "positional",
-          "value": "--rm",
-          "valueHint": "--rm"
-        }
-      ],
       "environmentVariables": [
         {
           "name": "TASTYTRADE_API_URL",
