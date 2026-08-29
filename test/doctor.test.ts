@@ -368,7 +368,7 @@ describe("configuration copied from the dispatcher", () => {
     const pkg = JSON.parse(
       readFileSync(path.join(REPO_ROOT, "package.json"), "utf8"),
     ) as { private?: boolean; bin?: unknown; publishConfig?: unknown };
-    // The supported install paths are clone-and-build and the container image.
+    // The supported install path is clone-and-build.
     // `private` is what makes that stick: without it a publish still succeeds.
     expect(pkg.private).toBe(true);
     expect(pkg.bin).toBeUndefined();

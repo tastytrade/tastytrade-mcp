@@ -75,9 +75,10 @@ updates:
   #
   # Dependabot understands digest pins: it rewrites the SHA and the trailing
   # version comment together, which is the whole reason the digest rule is
-  # affordable. Do not "simplify" any `uses:` back to a major tag — release.yml
-  # explains why, and the tag is mutable by whoever owns the action's
-  # repository.
+  # affordable. Do not "simplify" any `uses:` back to a major tag: the
+  # repository sets sha_pinning_required, so a tag-pinned action is
+  # rejected at runtime, and a tag is mutable by whoever owns the
+  # action's repository.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
@@ -90,7 +91,7 @@ updates:
       prefix: chore
       include: scope
     groups:
-      # Three workflows sharing largely the same actions: one pull request.
+      # One workflow using five actions: one pull request, not five.
       actions:
         applies-to: version-updates
         patterns:
