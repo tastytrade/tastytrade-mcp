@@ -9,119 +9,6 @@
     "url": "https://github.com/tastytrade/tastytrade-mcp",
     "source": "github"
   },
-  "packages": [
-    {
-      "registryType": "oci",
-      "identifier": "ghcr.io/tastytrade/tastytrade-mcp:1.0.0",
-      "runtimeHint": "docker",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "name": "TASTYTRADE_API_URL",
-          "description": "API host. Defaults to the sandbox (cert) environment; set the production host explicitly to trade real money. Only a recognised tastytrade API host is accepted: any other host makes the server refuse to start rather than send the OAuth credentials there, unless that exact hostname is named in TASTYTRADE_ALLOW_UNKNOWN_API_HOST.",
-          "default": "https://api.cert.tastyworks.com",
-          "choices": [
-            "https://api.cert.tastyworks.com",
-            "https://api.tastyworks.com"
-          ],
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_CLIENT_ID",
-          "description": "OAuth2 client id for your tastytrade OAuth application.",
-          "isRequired": true,
-          "isSecret": true
-        },
-        {
-          "name": "TASTYTRADE_CLIENT_SECRET",
-          "description": "OAuth2 client secret for your tastytrade OAuth application.",
-          "isRequired": true,
-          "isSecret": true
-        },
-        {
-          "name": "TASTYTRADE_REFRESH_TOKEN",
-          "description": "OAuth2 refresh token. The server exchanges it for short-lived access tokens and refreshes them automatically.",
-          "isRequired": true,
-          "isSecret": true
-        },
-        {
-          "name": "MAX_ORDER_NOTIONAL_USD",
-          "description": "Hard cap on the buying-power impact of a single order. Exceeding it fails the pre-submit sanity check.",
-          "default": "50000",
-          "format": "number",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_READ_ONLY",
-          "description": "Set to true to serve only read-only tools. Write and destructive tools are withheld entirely.",
-          "default": "false",
-          "format": "boolean",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_HTTP_TIMEOUT_MS",
-          "description": "Per-request HTTP timeout in milliseconds, applied to every tastytrade call including the token grant. 0 is refused, because the HTTP client reads it as 'wait forever'.",
-          "default": "30000",
-          "format": "number",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_MAX_RESPONSE_BYTES",
-          "description": "Maximum size of a response this server will read, applied to every tastytrade call including the token grant. 0 and -1 are refused; the bound cannot be switched off.",
-          "default": "33554432",
-          "format": "number",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_HTTP_WALL_CLOCK_MS",
-          "description": "Ceiling on the total elapsed time of one request, in milliseconds. Separate from TASTYTRADE_HTTP_TIMEOUT_MS, which is a socket inactivity timeout an upstream can dribble past forever. Must be strictly greater than that value or it is refused. Defaults to three times it.",
-          "default": "90000",
-          "format": "number",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_ACCEPT_VERSION",
-          "description": "Override the Accept-Version request header. Defaults to today's UTC date as YYYYMMDD.",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_USER_AGENT",
-          "description": "Override the required User-Agent request header. Defaults to <package name>/<version>.",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_CREDENTIAL_CHANNEL",
-          "description": "What the server does about an interposed credential channel: 'warn' (the default, and any unrecognised value) names a proxy or a trust-store override on stderr and in the preflight report and starts anyway; 'strict' refuses to start unless the proxy's hostname is named in TASTYTRADE_ALLOW_PROXY. There is no acknowledgement for a trust-store override (NODE_EXTRA_CA_CERTS, or SSL_CERT_FILE / SSL_CERT_DIR with --use-openssl-ca): under 'strict' those are always a refusal.",
-          "default": "warn",
-          "choices": ["warn", "strict"],
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_ALLOW_PROXY",
-          "description": "Comma-separated proxy HOSTNAMES you acknowledge as carriers of the credential POST. Read only under TASTYTRADE_CREDENTIAL_CHANNEL=strict, where the hostname in http_proxy / https_proxy / all_proxy must appear here or the server refuses to start. Hostnames rather than a boolean, so a config that later retargets the proxy fails closed again.",
-          "isRequired": false,
-          "isSecret": false
-        },
-        {
-          "name": "TASTYTRADE_ALLOW_UNKNOWN_API_HOST",
-          "description": "Comma-separated hostnames acknowledged as destinations for the OAuth refresh token and client secret. The server refuses to start when TASTYTRADE_API_URL names a host that is not a recognised tastytrade API host; naming that exact hostname here allows it, for a proxy, a gateway or a local test double. It does not lift the refusal of plain http: to a non-loopback host, and an acknowledged host still warns on every start.",
-          "isRequired": false,
-          "isSecret": false
-        }
-      ]
-    }
-  ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "transport": "stdio",
@@ -134,7 +21,7 @@
         "note": "Every destructive tool requires a single-use confirmation token issued by its matching dry_run_* tool, valid for 60 seconds and bound to a hash of the submitted arguments."
       },
       "install": {
-        "note": "Two supported install paths: clone-and-build, or the published container image. This server is deliberately not published to npm, so there is no npx invocation.",
+        "note": "Install by cloning and building. This server publishes no container image and is not published to npm, so there is no docker pull and no npx invocation. A Dockerfile is included for anyone who wants to build their own image.",
         "cloneAndBuild": {
           "description": "Clone the repository, build it, and point your MCP client at the compiled entrypoint.",
           "setup": [
@@ -160,33 +47,6 @@
           "notes": [
             "args must be an absolute path; MCP clients do not resolve ~ or relative paths.",
             "A .env file in the repository is NOT auto-loaded. Credentials must come from the client's env block, or be exported in the launching shell."
-          ]
-        },
-        "docker": {
-          "description": "Run the published image. Credentials come from an --env-file that stays outside the image.",
-          "setup": [
-            "Write a .env holding TASTYTRADE_CLIENT_ID, TASTYTRADE_CLIENT_SECRET and TASTYTRADE_REFRESH_TOKEN, one KEY=value per line. No clone is needed for this path; .env.sample in the repository lists the same names.",
-            "docker pull ghcr.io/tastytrade/tastytrade-mcp:1.0.0"
-          ],
-          "clientConfig": {
-            "mcpServers": {
-              "tastytrade": {
-                "command": "docker",
-                "args": [
-                  "run",
-                  "-i",
-                  "--rm",
-                  "--env-file",
-                  "/absolute/path/to/.env",
-                  "ghcr.io/tastytrade/tastytrade-mcp:1.0.0"
-                ]
-              }
-            }
-          },
-          "notes": [
-            "The -i flag is mandatory. This is a stdio server: without -i the container exits immediately with no output, which is indistinguishable from a crash.",
-            "Do not pass -d/--detach and do not publish a port. There is no HTTP listener.",
-            "--env-file keeps credentials out of every image layer and out of the client config file."
           ]
         }
       },
