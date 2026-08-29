@@ -198,8 +198,7 @@ export interface UnavailableField {
 
 /** The outcome of one of a computed resource's fetches. */
 type Settled<T> =
-  | { ok: true; value: T }
-  | { ok: false; failure: UnavailableField };
+  { ok: true; value: T } | { ok: false; failure: UnavailableField };
 
 /**
  * Describe a thrown fetch failure for inclusion in a resource body.

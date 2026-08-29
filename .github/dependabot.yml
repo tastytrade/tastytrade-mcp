@@ -82,6 +82,19 @@ updates:
         dependency-type: development
         patterns:
           - "*"
+        # prettier is excluded so it arrives on its own.
+        #
+        # It ships formatting changes in MINOR releases, and the gate checks
+        # formatting, so a prettier bump is never just a version bump — it is a
+        # version bump plus a reformat that no bot can produce. Inside a wildcard
+        # group that made every other dev update fail with it: a group is green
+        # only if every member is, and this one structurally cannot be.
+        #
+        # The version in package.json is pinned exactly for the same reason. A
+        # caret range let 3.8.3 become 3.9.6 as a lockfile-only change, with no
+        # manifest diff to review and no signal that formatting had moved.
+        exclude-patterns:
+          - "prettier"
       # No group for the two runtime dependencies (@modelcontextprotocol/sdk and
       # axios). Those are the ones that ship inside the container image and sit
       # on the money-moving path, so each one gets its own pull request and its

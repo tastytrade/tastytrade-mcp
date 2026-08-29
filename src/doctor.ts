@@ -553,10 +553,7 @@ export function inspectCredentials(env: NodeJS.ProcessEnv): CredentialState {
 // ---------------------------------------------------------------------------
 
 export type ApiEnvironment =
-  | "production"
-  | "sandbox"
-  | "swapped-domain"
-  | "unknown";
+  "production" | "sandbox" | "swapped-domain" | "unknown";
 
 export interface HostClassification {
   environment: ApiEnvironment;

@@ -544,3 +544,67 @@ describe("toWatchlistEntries", () => {
     expect(toWatchlistEntries(undefined)).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// checks_not_run and the dry-run envelope
+//
+// The description IS the contract an agent reads. Both of these were prose that
+// had drifted from the implementation, and prose drifts silently — so each is
+// asserted here rather than left to review.
+// ---------------------------------------------------------------------------
+
+describe("every route that reports checks_not_run explains what it means", () => {
+  /** Tools whose outputSchema declares the array. */
+  const reporters = Object.entries(TOOL_METADATA).filter(([, meta]) =>
+    JSON.stringify(meta.outputSchema ?? {}).includes("checks_not_run"),
+  );
+
+  it("finds the reporters, so an empty list cannot pass for a pass", () => {
+    // If this drops to zero the assertion below becomes vacuous.
+    expect(reporters.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it.each(reporters.map(([name]) => name))(
+    "%s says an empty sanity_warnings is not a completed check",
+    (name) => {
+      const description = TOOL_METADATA[name].description;
+      // The sentence, not a paraphrase: an agent that dry-runs, sees an empty
+      // sanity_warnings and reports "this order passed safety checks" is wrong,
+      // and the tool it called is the only thing positioned to say so.
+      expect(description).toContain("checks_not_run");
+      expect(description).toMatch(
+        /empty `?sanity_warnings`? means 'nothing found among the checks that ran', never 'everything was checked'/,
+      );
+    },
+  );
+});
+
+describe("the dry-run routes describe the envelope they actually return", () => {
+  const dryRunReporters = Object.keys(TOOL_METADATA).filter(
+    (n) =>
+      n.startsWith("tastytrade_dry_run_") &&
+      JSON.stringify(TOOL_METADATA[n].outputSchema ?? {}).includes(
+        "checks_not_run",
+      ),
+  );
+
+  it.each(dryRunReporters)("%s names the upstream member", (name) => {
+    const description = TOOL_METADATA[name].description;
+    // Everything the broker sent is nested under `upstream`; the server's own
+    // fields are its siblings. A description promising a flat payload sends
+    // callers to response.order, which is undefined.
+    expect(description).toContain("upstream");
+  });
+
+  it.each(dryRunReporters)(
+    "%s does not tell a caller to read a top-level errors[]",
+    (name) => {
+      const description = TOOL_METADATA[name].description;
+      // `errors[]` is absent from the envelope, not empty — code written to the
+      // old wording does `response.errors.length` and throws. Any mention has
+      // to qualify it as living under upstream.
+      const bare = description.match(/(?<!upstream\.)errors\[\]/g);
+      expect(bare ?? []).toEqual([]);
+    },
+  );
+});

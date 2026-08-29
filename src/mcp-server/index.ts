@@ -991,8 +991,7 @@ export function attachProvenance(result: any, tally: BoundedTally): void {
  * been narrowed.
  */
 type SentAfterToken<T> =
-  | { sent: true; value: T }
-  | { sent: false; refusal: any };
+  { sent: true; value: T } | { sent: false; refusal: any };
 
 /**
  * What became of a request that failed after its confirmation token was spent, for

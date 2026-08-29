@@ -290,8 +290,7 @@ describe("customer_id is pinned to the authenticated customer", () => {
       expect(customerTools.length).toBeGreaterThanOrEqual(2);
       for (const tool of customerTools) {
         const props = tool.inputSchema?.properties as
-          | Record<string, unknown>
-          | undefined;
+          Record<string, unknown> | undefined;
         expect([tool.name, props?.customer_id]).toEqual([tool.name, undefined]);
       }
     } finally {
