@@ -898,10 +898,13 @@ describe("single order: dry_run_order -> place_order", () => {
       upstream_notes: string[];
     };
 
-    // The full round trip: pre-flight, the two sanity reads, then the live POST.
+    // The full round trip: pre-flight, the three sanity reads, then the live
+    // POST. The instrument read is the tick check fetching the price increment
+    // published for the leg's underlying.
     expect(trace(h)).toEqual([
       `POST /accounts/${ACCT}/orders/dry-run`,
       `GET /accounts/${ACCT}/position-limit`,
+      `GET /instruments/equities/AAPL`,
       `GET /accounts/${ACCT}/trading-status`,
       `POST /accounts/${ACCT}/orders`,
     ]);

@@ -205,6 +205,40 @@ function claimsAccountDirectory(route: Route): boolean {
   );
 }
 
+/** Matches any single-equity instrument read: /instruments/equities/{symbol}. */
+const EQUITY_INSTRUMENT_RE = /\/instruments\/equities\/[^/]+$/;
+
+/**
+ * A tick schedule for every equity, so the submit path's tick check has
+ * something to read.
+ *
+ * Installed for the same reason the account-directory default is, and refused
+ * for the same reason: a suite that routes this path specifically is testing
+ * what the check does with a particular schedule and must win, while a suite
+ * ending in a catch-all only meant "answer everything I did not name". Without
+ * a default the check reports an unreadable schedule, which attaches a warning
+ * to every order in the file and drowns whatever each suite is asserting — the
+ * position-limit payload had exactly this problem.
+ *
+ * 0.01 for equities and a 3.00-thresholded 0.05/0.10 for options are the real
+ * shapes; see test/e2e/_payloads/tastytrade_get_option_chain_nested.json.
+ */
+const DEFAULT_EQUITY_INSTRUMENT = {
+  "tick-sizes": [{ value: "0.01" }],
+  "option-tick-sizes": [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }],
+};
+
+function claimsEquityInstrument(route: Route): boolean {
+  const probe = "/instruments/equities/AAPL";
+  if (typeof route.matcher === "string") {
+    return EQUITY_INSTRUMENT_RE.test(route.matcher);
+  }
+  return (
+    route.matcher.test(probe) &&
+    !route.matcher.test("/an-unrelated-path-no-suite-routes")
+  );
+}
+
 function normalizeHeaders(config: AxiosRequestConfig): Record<string, string> {
   const out: Record<string, string> = {};
   const raw = (config.headers ?? {}) as Record<string, unknown>;
@@ -268,6 +302,15 @@ export async function createHarness(
       },
     });
   }
+  if (!routes.some(claimsEquityInstrument)) {
+    // Unshifted for the same ordering reason as the directory default above.
+    routes.unshift({
+      matcher: EQUITY_INSTRUMENT_RE,
+      method: "GET",
+      reply: { data: DEFAULT_EQUITY_INSTRUMENT },
+    });
+  }
+
   const requests: RecordedRequest[] = [];
   const fallback: RouteReply = options.fallback ?? { status: 200, data: {} };
 

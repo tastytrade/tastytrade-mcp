@@ -18,6 +18,7 @@ import {
   ADVISORY_READ_BUDGET_MS,
   DEFAULT_MAX_ORDER_NOTIONAL_USD,
   ORDER_LEG_INSTRUMENT_TYPES,
+  tickForPrice,
   UNCEILINGED_ORDER_LEG_INSTRUMENT_TYPES,
   type OutboundOrderBody,
 } from "../../src/safety/sanity-checks.js";
@@ -70,6 +71,8 @@ function makeClient(
     status?: unknown;
     limitErr?: boolean;
     statusErr?: boolean;
+    instrument?: unknown;
+    instrumentErr?: boolean;
   } = {},
 ): TastytradeClient {
   const client = {
@@ -78,6 +81,10 @@ function makeClient(
       // `in`, not `??`: the null and undefined payloads are themselves under
       // test, and `??` would quietly substitute the default for both.
       return "limits" in opts ? opts.limits : ALL_LIMITS;
+    }),
+    getInstrument: jest.fn(async () => {
+      if (opts.instrumentErr) throw new Error("instrument endpoint down");
+      return "instrument" in opts ? opts.instrument : AAPL_INSTRUMENT;
     }),
     getAccountStatus: jest.fn(async () => {
       if (opts.statusErr) throw new Error("status endpoint down");
@@ -91,6 +98,21 @@ function makeClient(
   };
   return client as unknown as TastytradeClient;
 }
+
+/**
+ * The equity instrument payload the tick check reads.
+ *
+ * Both schedules are here because the check picks between them by leg instrument
+ * type: `tick-sizes` for an Equity leg, `option-tick-sizes` for an Equity Option
+ * leg. A thresholded entry applies BELOW its threshold; the entry without one is
+ * the fallback at and above every threshold. Shapes taken from
+ * test/e2e/_payloads/tastytrade_get_option_chain_nested.json.
+ */
+const AAPL_INSTRUMENT = {
+  symbol: "AAPL",
+  "tick-sizes": [{ value: "0.01" }],
+  "option-tick-sizes": [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }],
+};
 
 const ACCT = "5WX34382";
 
@@ -2169,6 +2191,7 @@ describe("a broker note cannot enter the server's own verdict channel", () => {
     expect(res.checksNotRun).toEqual([
       "dry_run_described_order",
       "per_leg_order_size",
+      "tick_size",
       "account_closing_only",
     ]);
   });
@@ -2281,5 +2304,179 @@ describe("the dry-run note COUNT is bounded, and the omission is disclosed", () 
     expect(e.toolError.message).toContain("Dry-run blocked");
     expect(e.toolError.message.length).toBeLessThan(10_000);
     expect(e.toolError.message).toMatch(/omitted/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tick size
+//
+// The order price has to be an increment the venue accepts. tastytrade publishes
+// the schedule per instrument, so this is a live read like the position limits,
+// and it fails the same way: a violation is a HARD BLOCK, and a schedule that
+// could not be read is named in checks_not_run rather than passed.
+// ---------------------------------------------------------------------------
+
+function optionLeg(quantity = 1, action = "Buy to Open"): OutboundOrderBody {
+  return {
+    legs: [
+      {
+        "instrument-type": "Equity Option",
+        symbol: "AAPL  270115C00007000",
+        action,
+        quantity,
+      },
+    ],
+  };
+}
+
+const echoed = { ...cleanDryRun, order: ORDER_ECHO };
+
+describe("runSanityChecks — tick size", () => {
+  it("hard-blocks an option limit price off the published increment", async () => {
+    // 1.63 against a 0.05 increment: a dry-run returned clean on exactly this
+    // shape, minted a token, and the order would have died at exchange routing.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient(),
+        ACCT,
+        { ...optionLeg(), price: "1.63" },
+        echoed,
+      ),
+    );
+    expect(isToolErrorException(e)).toBe(true);
+    if (isToolErrorException(e)) {
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      // Carries what the leg-action error carries: which leg, which symbol,
+      // what was expected, what arrived.
+      expect(e.toolError.message).toMatch(/Leg 0/);
+      expect(e.toolError.message).toContain("AAPL  270115C00007000");
+      expect(e.toolError.message).toContain("0.05");
+      expect(e.toolError.message).toContain("1.63");
+      expect(e.toolError.retryable).toBe(false);
+    }
+  });
+
+  it("accepts a price on the increment and records the check as run", async () => {
+    const client = makeClient();
+    const res = await runSanityChecks(
+      client,
+      ACCT,
+      { ...optionLeg(), price: "1.60" },
+      echoed,
+    );
+    expect(res.checksNotRun).not.toContain("tick_size");
+    // Asserted explicitly: `not.toContain` alone would also hold if the check
+    // did not exist, so it has to say that the schedule was actually fetched,
+    // and fetched for the OCC root rather than the contract symbol.
+    expect(client.getInstrument).toHaveBeenCalledWith("AAPL");
+  });
+
+  it("picks the equity schedule for an equity leg", async () => {
+    // 6.005 is off AAPL's 0.01 equity increment and would be off the option
+    // schedule too, so this fails whichever is chosen — what it proves is that
+    // an equity leg is checked at all.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient(),
+        ACCT,
+        { ...equityLeg(1), price: "6.005" },
+        echoed,
+      ),
+    );
+    expect(isToolErrorException(e)).toBe(true);
+  });
+
+  it("applies the threshold: the fallback increment at and above it", async () => {
+    // 3.15 sits on the 0.05 thresholded increment but off the 0.1 fallback that
+    // applies at and above 3.0. A read that ignored the threshold would pass it.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient(),
+        ACCT,
+        { ...optionLeg(), price: "3.15" },
+        echoed,
+      ),
+    );
+    expect(isToolErrorException(e)).toBe(true);
+  });
+
+  it("names the check as not run when the instrument read fails", async () => {
+    const res = await runSanityChecks(
+      makeClient({ instrumentErr: true }),
+      ACCT,
+      { ...optionLeg(), price: "1.63" },
+      echoed,
+    );
+    // Not a pass: an unreadable schedule must never look like a checked price.
+    expect(res.checksNotRun).toContain("tick_size");
+    expect(res.warnings.join(" ")).toMatch(/tick/i);
+  });
+
+  it("names the check as not run for a multi-leg order", async () => {
+    // A spread prices against spread-tick-sizes, a different schedule.
+    const twoLegs: OutboundOrderBody = {
+      legs: [
+        ...(optionLeg().legs ?? []),
+        ...(optionLeg(1, "Sell to Open").legs ?? []),
+      ],
+      price: "0.85",
+    };
+    const res = await runSanityChecks(makeClient(), ACCT, twoLegs, echoed);
+    expect(res.checksNotRun).toContain("tick_size");
+  });
+
+  it("names the check as not run when the order carries no price", async () => {
+    const res = await runSanityChecks(makeClient(), ACCT, optionLeg(), echoed);
+    expect(res.checksNotRun).toContain("tick_size");
+  });
+});
+
+describe("tickForPrice", () => {
+  // Scaled integers: the helper works in hundred-millionths so a decimal price
+  // never meets floating-point modulo. 1e8 covers the 0.00005 futures tick.
+  const S = 1e8;
+  const at = (n: number) => Math.round(n * S);
+
+  it("picks the band a price falls below, across several thresholds", () => {
+    // Three bands, deliberately supplied out of order: the helper sorts them,
+    // and with fewer than two banded entries that sort is never exercised.
+    const schedule = [
+      { threshold: "10.0", value: "0.10" },
+      { value: "0.25" },
+      { threshold: "1.0", value: "0.01" },
+      { threshold: "3.0", value: "0.05" },
+    ];
+    expect(tickForPrice(schedule, at(0.5))).toBe(at(0.01));
+    expect(tickForPrice(schedule, at(2.0))).toBe(at(0.05));
+    expect(tickForPrice(schedule, at(5.0))).toBe(at(0.1));
+    // At and above every threshold, the entry carrying none.
+    expect(tickForPrice(schedule, at(50))).toBe(at(0.25));
+  });
+
+  it("treats a threshold as exclusive at its own value", () => {
+    const schedule = [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }];
+    expect(tickForPrice(schedule, at(2.99))).toBe(at(0.05));
+    expect(tickForPrice(schedule, at(3.0))).toBe(at(0.1));
+  });
+
+  it("returns null for anything it cannot read, rather than guessing", () => {
+    // Every one of these means "not checked". A helper that fell back to a
+    // default increment here would turn an unreadable schedule into a passed
+    // price, which is the failure this whole check exists to prevent.
+    expect(tickForPrice(undefined, at(1))).toBeNull();
+    expect(tickForPrice(null, at(1))).toBeNull();
+    expect(tickForPrice([], at(1))).toBeNull();
+    expect(tickForPrice("0.05", at(1))).toBeNull();
+    expect(tickForPrice([null], at(1))).toBeNull();
+    expect(tickForPrice(["0.05"], at(1))).toBeNull();
+    expect(tickForPrice([{ value: "nope" }], at(1))).toBeNull();
+    expect(tickForPrice([{ value: "0" }], at(1))).toBeNull();
+    expect(tickForPrice([{ value: "-0.05" }], at(1))).toBeNull();
+    expect(tickForPrice([{ threshold: "x", value: "0.05" }], at(1))).toBeNull();
+    // A schedule with only bands and no fallback: nothing applies at or above
+    // the highest threshold.
+    expect(
+      tickForPrice([{ threshold: "3.0", value: "0.05" }], at(4)),
+    ).toBeNull();
   });
 });

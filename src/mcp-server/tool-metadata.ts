@@ -3000,7 +3000,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
           items: {
             type: "string",
           },
@@ -3118,7 +3118,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
           items: {
             type: "string",
           },
@@ -3478,7 +3478,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
           items: {
             type: "string",
           },
@@ -3616,7 +3616,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
           items: {
             type: "string",
           },
@@ -3731,7 +3731,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
           items: {
             type: "string",
           },
@@ -3842,7 +3842,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
           items: {
             type: "string",
           },
@@ -5035,7 +5035,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
           items: {
             type: "string",
           },
@@ -5177,7 +5177,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
           items: {
             type: "string",
           },
@@ -5396,7 +5396,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids. A pre-flight evaluates only the three payload questions that gate token issuance (dry_run_readable, dry_run_errors, dry_run_described_order), so everything else in the catalogue is listed here: notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Those run on the matching live tool. Derived from the same predicate the dispatcher gates issuance on rather than written by hand.",
           items: {
             type: "string",
           },
@@ -5512,7 +5512,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
         checks_not_run: {
           type: "array",
           description:
-            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
+            "SERVER-AUTHORED. Which pre-submit checks this route did NOT evaluate, as stable ids: dry_run_readable, dry_run_errors, dry_run_described_order, notional_cap, per_leg_order_size, tick_size, account_frozen, account_closing_only, account_margin_call, account_risk_reducing_only. Derived from what the route actually ran rather than written by hand, so a check that could not be evaluated is disclosed instead of being absent. An empty array is a positive claim that the whole catalogue ran. The legless routes (edit_order, replace_order, edit_complex_order) always report per_leg_order_size and account_closing_only, because both read the order's legs and those bodies carry none; any account_* id appears when the trading-status read failed or answered with no readable flag.",
           items: {
             type: "string",
           },
