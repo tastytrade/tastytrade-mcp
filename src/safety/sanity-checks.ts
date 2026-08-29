@@ -849,6 +849,8 @@ export const SANITY_CHECK_IDS = [
   "notional_cap",
   /** Per-leg quantity against the account's published order-size ceiling. */
   "per_leg_order_size",
+  /** Order price against the increment tastytrade publishes for the instrument. */
+  "tick_size",
   /** The account is not frozen. A HARD BLOCK; needs no legs. */
   "account_frozen",
   /** No leg opens a position on a closing-only account. Needs legs. */
@@ -1322,6 +1324,93 @@ export async function runStoredDryRunChecks(
   return { warnings, upstreamNotes, checksNotRun: deriveChecksNotRun(ran) };
 }
 
+// ---------------------------------------------------------------------------
+// Tick size
+//
+// tastytrade publishes the price increment per instrument, as an array where an
+// entry carrying a `threshold` applies BELOW that threshold and the single entry
+// without one is the fallback at and above every threshold. An equity leg reads
+// `tick-sizes`; an equity option leg reads `option-tick-sizes` off the SAME
+// underlying equity, which is why one instrument read covers both.
+//
+// Deliberately narrow. A multi-leg order prices against `spread-tick-sizes`, a
+// different schedule, and futures carry their own — guessing with the
+// single-leg equity schedule would be worse than saying nothing, so those cases
+// are named in checks_not_run instead. Anything unreadable lands there too: a
+// price this module could not check must never read as a price it approved.
+// ---------------------------------------------------------------------------
+
+/** Integer scale for the modulo. Eight places covers the 0.00005 futures tick. */
+const TICK_SCALE = 1e8;
+
+/** A finite scaled integer, or null when the value is not a usable decimal. */
+function scaledDecimal(value: unknown): number | null {
+  if (typeof value !== "string" && typeof value !== "number") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * TICK_SCALE);
+}
+
+/**
+ * The increment that applies to `price` under `schedule`, as a scaled integer.
+ *
+ * Returns null when the schedule is not an array of readable entries, or when it
+ * has no entry that applies — both of which mean "not checked", never "fine".
+ */
+export function tickForPrice(
+  schedule: unknown,
+  scaledPrice: number,
+): number | null {
+  if (!Array.isArray(schedule) || schedule.length === 0) return null;
+
+  let fallback: number | null = null;
+  const banded: Array<{ threshold: number; tick: number }> = [];
+
+  for (const entry of schedule) {
+    if (entry === null || typeof entry !== "object") return null;
+    const tick = scaledDecimal((entry as Record<string, unknown>).value);
+    if (tick === null || tick <= 0) return null;
+    const rawThreshold = (entry as Record<string, unknown>).threshold;
+    if (rawThreshold === undefined || rawThreshold === null) {
+      fallback = tick;
+      continue;
+    }
+    const threshold = scaledDecimal(rawThreshold);
+    if (threshold === null) return null;
+    banded.push({ threshold, tick });
+  }
+
+  banded.sort((a, b) => a.threshold - b.threshold);
+  for (const band of banded) {
+    if (scaledPrice < band.threshold) return band.tick;
+  }
+  return fallback;
+}
+
+/** The schedule field an instrument payload publishes for this leg's type. */
+function tickScheduleField(instrumentType: string): string | null {
+  if (instrumentType === "Equity") return "tick-sizes";
+  if (instrumentType === "Equity Option") return "option-tick-sizes";
+  return null;
+}
+
+/**
+ * The underlying equity symbol an OCC option symbol is written against.
+ *
+ * The root occupies the first six characters, space-padded. Returned trimmed, or
+ * null when there is nothing there to read.
+ */
+function occRoot(symbol: unknown): string | null {
+  if (typeof symbol !== "string") return null;
+  const root = symbol.slice(0, 6).trim();
+  return root.length > 0 ? root : null;
+}
+
+/** Human-readable form of a scaled integer, for the refusal message. */
+function unscale(scaled: number): string {
+  return String(scaled / TICK_SCALE);
+}
+
 /**
  * Run pre-submit checks. Throws a ToolError on hard-block conditions, returns
  * the accumulated soft-warning list otherwise. Caller should attach the
@@ -1490,6 +1579,70 @@ export async function runSanityChecks(
     // instrument-type from being echoed at size.
     if (sawCryptoLeg || unboundedTypes.size > 0) {
       warnings.push(UNCAPPED_LEG_BOUNDS);
+    }
+  }
+
+  // 2c. Order price against the published increment.
+  //
+  // A live read, like the limits above, and it fails the same way: a price off
+  // the increment is a HARD BLOCK, and a schedule that could not be read is
+  // named in checks_not_run rather than passed. Narrow by design — see the
+  // note above tickForPrice for why a spread and a futures leg are skipped
+  // rather than guessed at.
+  const scaledPrice = scaledDecimal(
+    (args as unknown as Record<string, unknown>).price,
+  );
+  const tickLeg = legs.length === 1 ? legs[0] : null;
+  const tickField = tickLeg
+    ? tickScheduleField(instrumentTypeOf(tickLeg))
+    : null;
+
+  if (scaledPrice === null || tickLeg === null || tickField === null) {
+    // Nothing to check, or nothing this module knows how to check. Silent: the
+    // absence is already reported by tick_size appearing in checks_not_run, and
+    // a warning on every market order would be noise.
+  } else {
+    const underlying =
+      tickField === "option-tick-sizes"
+        ? occRoot(tickLeg.symbol)
+        : typeof tickLeg.symbol === "string"
+          ? tickLeg.symbol
+          : null;
+    let schedule: unknown = null;
+    let read = false;
+    if (underlying !== null) {
+      try {
+        // GET /instruments/equities/{symbol} has a published 3/sec ceiling. The
+        // limiter has to know this endpoint is reached, for the same reason the
+        // trading-status charge above exists: an unbilled request is a request
+        // the ceiling does not govern.
+        chargeUpstreamCallDebt({ rateKey: "single_equity" });
+        const instrument = await client.getInstrument(underlying);
+        schedule = (instrument as Record<string, unknown> | null)?.[tickField];
+        read = true;
+      } catch {
+        read = false;
+      }
+    }
+    const tick = read ? tickForPrice(schedule, scaledPrice) : null;
+    if (tick === null) {
+      warnings.push(
+        `The price increment for ${describeSymbol(tickLeg.symbol)} could not be ` +
+          `read, so this order's price was not checked against a tick ` +
+          `schedule — ${SERVER_SIDE_BACKSTOP}`,
+      );
+    } else if (scaledPrice % tick !== 0) {
+      throw toolError({
+        code: "sanity_check_failed",
+        message:
+          `Leg 0 (${describeSymbol(tickLeg.symbol)}): price ` +
+          `${unscale(scaledPrice)} is not a multiple of the published ` +
+          `increment ${unscale(tick)}.`,
+        retryable: false,
+        hint: "Round the price to the instrument's increment and re-run the matching dry_run_* tool for a fresh token. The schedule is published as tick-sizes (equities) and option-tick-sizes (options on that equity) on GET /instruments/equities/{symbol}.",
+      });
+    } else {
+      ran.add("tick_size");
     }
   }
 

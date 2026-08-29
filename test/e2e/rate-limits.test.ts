@@ -707,9 +707,13 @@ describe("the order path pays for the requests it actually makes", () => {
 
     await placeOne(h);
 
-    // dry-run POST (1 tool call, 1 request) + place_order (1 tool call, 3
-    // requests) = 4 broker requests, and 4 global tokens.
-    expect(h.requests).toHaveLength(4);
+    // dry-run POST (1 tool call, 1 request) + place_order (1 tool call, 4
+    // requests: position-limit, the instrument read the tick check needs,
+    // trading-status, then the order POST) = 5 broker requests, and 5 global
+    // tokens. The instrument read is also charged to its own single_equity
+    // bucket, so the submit path costs one token more than the number of
+    // safety questions it answers.
+    expect(h.requests).toHaveLength(5);
     let spent = 0;
     for (;;) {
       try {
@@ -719,7 +723,7 @@ describe("the order path pays for the requests it actually makes", () => {
         break;
       }
     }
-    expect(spent).toBe(GLOBAL_PER_SECOND - 4);
+    expect(spent).toBe(GLOBAL_PER_SECOND - 5);
   });
 
   it("bills the trading-status GET to its own published 1/sec bucket", async () => {
