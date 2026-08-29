@@ -1188,7 +1188,12 @@ export const ORDER_SEARCH_PROPERTIES = {
   },
   underlying_instrument_type: {
     type: "string",
-    description: "Filter by underlying instrument type.",
+    description:
+      "Filter by underlying instrument type. One of: Cryptocurrency, Equity, " +
+      "Equity Option, Event Contract, Fixed Income Security, Future, " +
+      "Future Option, Liquidity Pool. Not an enum: the value is passed " +
+      "through, so a type outside this list is accepted and simply matches " +
+      "nothing. Both order-search tools take the same vocabulary.",
   },
   futures_symbol: {
     type: "string",
