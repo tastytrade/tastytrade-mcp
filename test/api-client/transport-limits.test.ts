@@ -55,17 +55,13 @@ const SRC = (file: string) =>
  */
 const ns = oauth as unknown as Record<string, unknown>;
 const resolveMaxResponseBytes = ns["resolveMaxResponseBytes"] as
-  | (() => number)
-  | undefined;
+  (() => number) | undefined;
 const resolveHttpWallClockMs = ns["resolveHttpWallClockMs"] as
-  | (() => number)
-  | undefined;
+  (() => number) | undefined;
 const httpTransportLimits = ns["httpTransportLimits"] as
-  | (() => { maxContentLength: number; maxBodyLength: number })
-  | undefined;
+  (() => { maxContentLength: number; maxBodyLength: number }) | undefined;
 const DEFAULT_MAX_RESPONSE_BYTES = ns["DEFAULT_MAX_RESPONSE_BYTES"] as
-  | number
-  | undefined;
+  number | undefined;
 const MAX_RESPONSE_BYTES_ENV_VAR =
   (ns["MAX_RESPONSE_BYTES_ENV_VAR"] as string | undefined) ??
   "TASTYTRADE_MAX_RESPONSE_BYTES";
@@ -473,8 +469,7 @@ describe("a local bound is reported as a local bound", () => {
     });
 
   const transportBoundRefusal = ns["transportBoundRefusal"] as
-    | ((error: unknown) => "size" | "wall-clock" | undefined)
-    | undefined;
+    ((error: unknown) => "size" | "wall-clock" | undefined) | undefined;
 
   it("tells the two bounds apart from the broker's own 5xx", () => {
     if (!transportBoundRefusal) throw new Error("not exported");
