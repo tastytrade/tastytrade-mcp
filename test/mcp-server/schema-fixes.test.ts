@@ -25,11 +25,13 @@
 
 import { describe, it, expect } from "@jest/globals";
 import {
+  MCP_ORDER_SOURCE,
   TastytradeMCPServer,
   decorateTool,
   toWatchlistEntries,
   validateLegActions,
 } from "../../src/mcp-server/index.js";
+import { PACKAGE_VERSION } from "../../src/version.js";
 import { TOOL_METADATA } from "../../src/mcp-server/tool-metadata.js";
 import {
   GLOBAL_PER_SECOND,
@@ -657,5 +659,35 @@ describe("multi-symbol reads say they do not preserve request order", () => {
     // impact" — nothing to do with response ordering — so this test passed
     // before the sentence it is supposed to require existed at all.
     expect(description).toMatch(/request order|key(?:ed)? by symbol/i);
+  });
+});
+
+describe("internal metadata tracks its source", () => {
+  it("the order source tag carries the package version", () => {
+    // Order records are attributed by this string. A literal drifts from
+    // package.json with nothing to catch it, which is the same reason
+    // src/version.ts exists for serverInfo and the User-Agent.
+    expect(MCP_ORDER_SOURCE).toBe(`tastytrade-mcp/${PACKAGE_VERSION}`);
+    expect(MCP_ORDER_SOURCE).not.toBe("tastytrade-mcp/1.0");
+  });
+
+  it("the nested chain's expirations array describes its entries", () => {
+    const schema = TOOL_METADATA["tastytrade_get_option_chain_nested"]
+      .outputSchema as Record<string, any>;
+    const find = (n: any): any => {
+      if (!n || typeof n !== "object") return undefined;
+      if (Array.isArray(n)) return n.map(find).find(Boolean);
+      if (n.expirations) return n.expirations;
+      return Object.values(n).map(find).find(Boolean);
+    };
+    const exp = find(schema);
+    expect(exp).toBeDefined();
+    // For an array instance ajv ignores `additionalProperties`, so `items` is
+    // the only thing that makes the per-entry fields part of the contract.
+    expect(exp.items).toBeDefined();
+    expect(exp.items.properties?.["expiration-date"]).toBeDefined();
+    // And the union type is retained deliberately — narrowing it would reject a
+    // shape the broker may still send.
+    expect(exp.type).toEqual(["array", "object"]);
   });
 });

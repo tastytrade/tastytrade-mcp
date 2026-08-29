@@ -36,7 +36,10 @@ import { toolError } from "../../src/safety/errors.js";
 import type { ToolError } from "../../src/safety/errors.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { GATED_ROUTES } from "../../src/api-client.js";
-import { TOOL_ANNOTATIONS } from "../../src/mcp-server/index.js";
+import {
+  MCP_ORDER_SOURCE,
+  TOOL_ANNOTATIONS,
+} from "../../src/mcp-server/index.js";
 import { accessClassFor } from "../../src/mcp-server/annotations.js";
 
 // ---------------------------------------------------------------------------
@@ -141,7 +144,7 @@ function orderArgs(
 const EXPECTED_ORDER_BODY = {
   "time-in-force": "Day",
   "order-type": "Limit",
-  source: "tastytrade-mcp/1.0",
+  source: MCP_ORDER_SOURCE,
   price: "1.02",
   "price-effect": "Debit",
   legs: [
@@ -1116,7 +1119,7 @@ describe("args binding: any change to the order invalidates the token", () => {
     expect(patched.method).toBe("PATCH");
     expect(patched.url).toBe(ORDER_BY_ID_URL);
     expect(patched.body).toEqual({
-      source: "tastytrade-mcp/1.0",
+      source: MCP_ORDER_SOURCE,
       "order-type": "Limit",
       price: "1.02",
       "price-effect": "Debit",
@@ -1634,7 +1637,7 @@ describe("complex orders", () => {
   /** The kebab body the dispatcher builds from complexArgs() — and hashes. */
   const EXPECTED_COMPLEX_BODY = {
     type: "OTOCO",
-    source: "tastytrade-mcp/1.0",
+    source: MCP_ORDER_SOURCE,
     "trigger-order": {
       "order-type": "Limit",
       "time-in-force": "Day",

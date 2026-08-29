@@ -26,6 +26,7 @@ import { createHarness, callOk, callError, loadFixture } from "./harness.js";
 import type { Harness, RecordedRequest, Route } from "./harness.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { _resetTokensForTest } from "../../src/safety/confirmation.js";
+import { MCP_ORDER_SOURCE } from "../../src/mcp-server/index.js";
 
 const ACCT = "5WX00001";
 const ORDER_ID = "1075264";
@@ -38,7 +39,6 @@ const COMPLEX_ID = "56544";
  * to be a deliberate two-sided edit rather than something the tests follow
  * silently.
  */
-const MCP_ORDER_SOURCE = "tastytrade-mcp/1.0";
 
 let h: Harness | undefined;
 
@@ -1771,7 +1771,7 @@ describe("complex order: cancel and PAIRS-threshold edit", () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Every order body carries `source: "tastytrade-mcp/1.0"` so tastytrade can attribute
+ * Every order body carries `source: MCP_ORDER_SOURCE` so tastytrade can attribute
  * flow that originated through MCP — except the complex-order edit, whose request body
  * orders.md enumerates as exactly the two ratio-price fields, so it stays unstamped
  * rather than risk a rejected edit for the sake of a tag.

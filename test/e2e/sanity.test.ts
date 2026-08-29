@@ -34,6 +34,7 @@ import { isToolErrorException } from "../../src/safety/errors.js";
 import type { ToolError } from "../../src/safety/errors.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { _resetTokensForTest } from "../../src/safety/confirmation.js";
+import { MCP_ORDER_SOURCE } from "../../src/mcp-server/index.js";
 
 const ACCT = "5WX00001";
 
@@ -1397,7 +1398,7 @@ describe("sanity checks: the checked body is the submitted body", () => {
     expect(live?.body).toEqual({
       "time-in-force": "Day",
       "order-type": "Limit",
-      source: "tastytrade-mcp/1.0",
+      source: MCP_ORDER_SOURCE,
       price: "10.00",
       "price-effect": "Debit",
       legs: [

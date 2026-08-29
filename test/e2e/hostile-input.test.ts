@@ -28,6 +28,7 @@ import {
   canonicalize,
 } from "../../src/safety/confirmation.js";
 import {
+  MCP_ORDER_SOURCE,
   MAX_ARGUMENT_DEPTH,
   MAX_ECHOED_ARGUMENT_CHARS,
   snakeToKebabParams,
@@ -360,7 +361,7 @@ describe("prototype pollution through the translation seam", () => {
     // `source` is a real optional field on this body, and it is now written
     // unconditionally by the builder from a server-side constant — so the
     // injected prototype value cannot supply it or displace it.
-    expect(complex.source).toBe("tastytrade-mcp/1.0");
+    expect(complex.source).toBe(MCP_ORDER_SOURCE);
     expect(Object.keys((complex.orders as any[])[0])).toEqual([
       "order-type",
       "time-in-force",
@@ -392,7 +393,7 @@ describe("prototype pollution through the translation seam", () => {
     expect(body).toEqual({
       "time-in-force": "Day",
       "order-type": "Limit",
-      source: "tastytrade-mcp/1.0",
+      source: MCP_ORDER_SOURCE,
       price: "1.00",
       "price-effect": "Debit",
       legs: [
