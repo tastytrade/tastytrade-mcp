@@ -120,8 +120,7 @@ describe("the structuredContent mirror publishes exactly what the text says", ()
     })) as ToolResult;
 
     const provenance = res._meta?.["tastytrade/provenance"] as
-      | { truncation?: Record<string, number> }
-      | undefined;
+      { truncation?: Record<string, number> } | undefined;
     expect(provenance?.truncation?.keysDropped).toBe(1);
     // And the clean key kept its own value: a bounded key does not displace a
     // field that arrived intact.
