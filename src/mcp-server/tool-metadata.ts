@@ -5796,6 +5796,27 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
                   "Deliverable details for the chain. Arrives as an array of deliverable objects ({id, amount, deliverable-type, ...}).",
               },
               expirations: {
+                // The union type stays: narrowing it would turn a shape the broker may
+                // still send into a client-side rejection. `items` applies only to the
+                // array case, which is what the sandbox sends, and is what puts the
+                // per-entry fields into the contract — for an array instance ajv ignores
+                // `additionalProperties`, so before this they were described and
+                // unenforced.
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                  properties: {
+                    "expiration-date": {
+                      type: "string",
+                      description:
+                        "The expiration this group covers (YYYY-MM-DD). Read this from each array entry to build an expiration calendar.",
+                    },
+                    "expiration-type": { type: "string" },
+                    "days-to-expiration": { type: "integer" },
+                    "settlement-type": { type: "string" },
+                    strikes: { type: "array" },
+                  },
+                },
                 type: ["array", "object"],
                 description:
                   "Per-expiration groupings of strikes. Arrives as an ARRAY of expiration objects ({expiration-type, expiration-date, days-to-expiration, settlement-type, strikes[], ...}), not an object keyed by date.",

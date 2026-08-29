@@ -1458,7 +1458,7 @@ function buildDryRunReplaceEditToolDefs(): Tool[] {
  * buildComplexEditBody unstamped, document it, and pin it in the
  * order-translation tests exactly as `source` is pinned.
  */
-const MCP_ORDER_SOURCE = "tastytrade-mcp/1.0";
+export const MCP_ORDER_SOURCE = `tastytrade-mcp/${PACKAGE_VERSION}`;
 
 /**
  * Build the kebab-case body for a full-replacement order (Replace Order /

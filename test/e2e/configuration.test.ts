@@ -31,6 +31,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createHarness, callOk, callError, loadFixture } from "./harness.js";
 import type { Harness, HarnessOptions } from "./harness.js";
 import {
+  MCP_ORDER_SOURCE,
   TastytradeMCPServer,
   TOOL_ANNOTATIONS,
   SANDBOX_API_URL,
@@ -640,7 +641,7 @@ describe("dry-run previews stay available in read-only mode", () => {
     expect(req.body).toEqual({
       "order-type": "Limit",
       "time-in-force": "Day",
-      source: "tastytrade-mcp/1.0",
+      source: MCP_ORDER_SOURCE,
       price: "1.50",
       "price-effect": "Debit",
       legs: [

@@ -8,12 +8,13 @@ import {
 } from "../../src/mcp-server/index.js";
 
 /**
- * Mirrors MCP_ORDER_SOURCE in src/mcp-server/index.ts. Held as a literal here
- * so changing the stamp is a deliberate two-sided edit — this value is
- * reported to tastytrade and read back off their order flow, so it should not
- * be able to drift silently.
+ * Mirrors MCP_ORDER_SOURCE in src/mcp-server/index.ts, which is now
+ * `tastytrade-mcp/${PACKAGE_VERSION}`. Held as a literal here on purpose, so
+ * changing the stamp stays a deliberate two-sided edit: this value is reported
+ * to tastytrade and read back off their order flow, and a version bump that
+ * silently changed it on both sides at once is exactly what this literal is for.
  */
-const MCP_ORDER_SOURCE = "tastytrade-mcp/1.0";
+const MCP_ORDER_SOURCE = "tastytrade-mcp/1.0.0";
 
 describe("validateLegActions — instrument/action pairing", () => {
   it("returns null for non-array input", () => {
