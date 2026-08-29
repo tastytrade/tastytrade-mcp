@@ -36,6 +36,28 @@ updates:
     # a higher floor. Most updates then land as a lockfile-only diff, which is
     # the smallest thing a reviewer can be handed.
     versioning-strategy: increase-if-necessary
+    # Two dev dependencies are held below their latest major on purpose, for two
+    # different reasons. A typescript major cannot install at all: npm exits
+    # ERESOLVE before a single test runs, so the whole group goes red for a
+    # reason unrelated to its other members. An @types/node major installs and
+    # passes the gate; it is held for correctness, not installability.
+    #
+    # typescript: ts-jest@29.4.5, the version this tree installs, declares
+    # `typescript: >=4.3 <6`. typescript-eslint declares `>=4.8.4 <6.1.0`.
+    # ts-jest's bound is the tighter one and therefore the binding one, so a
+    # TypeScript 6 major fails on ts-jest, not on typescript-eslint — note
+    # `<6.1.0` would itself admit 6.0.x. Revisit when TS-JEST widens its peer
+    # range; ts-jest 29.4.12 already declares `>=4.3 <7`, so bumping ts-jest is
+    # the first move, and typescript-eslint will need checking at the same time.
+    #
+    # @types/node: this should track the Node major the server actually supports
+    # (.node-version and engines both say 22), not the newest published types.
+    # Types ahead of the runtime typecheck against APIs that are not there.
+    ignore:
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     # `include: scope` is what appends the `(deps)` / `(deps-dev)` scope, so the
     # prefix must NOT contain one: `prefix: chore(deps)` here would produce
     # "chore(deps)(deps): bump ...". As written this yields
