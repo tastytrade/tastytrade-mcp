@@ -608,3 +608,54 @@ describe("the dry-run routes describe the envelope they actually return", () => 
     },
   );
 });
+
+// ---------------------------------------------------------------------------
+// Sibling tools describing the same thing differently
+// ---------------------------------------------------------------------------
+
+describe("the order-search filters document one vocabulary, not two", () => {
+  const SIBLINGS = [
+    "tastytrade_search_orders",
+    "tastytrade_search_customer_orders",
+  ];
+
+  it("both name the same instrument-type values for the same filter", () => {
+    const listed = SIBLINGS.map((name) => {
+      const server = new TastytradeMCPServer();
+      const tool = server.getTools().find((t: Tool) => t.name === name) as
+        Tool | undefined;
+      const prop = (
+        tool?.inputSchema?.properties as
+          Record<string, { description?: string }> | undefined
+      )?.underlying_instrument_type;
+      const d = prop?.description ?? "";
+      // The vocabulary as a set, so wording may differ but the values may not.
+      return new Set(
+        d.match(
+          /Cryptocurrency|Equity Option|Equity|Event Contract|Fixed Income Security|Future Option|Future|Liquidity Pool/g,
+        ) ?? [],
+      );
+    });
+    // Establish the premise: each side actually lists something.
+    for (const s of listed) expect(s.size).toBeGreaterThan(0);
+    expect([...listed[0]].sort()).toEqual([...listed[1]].sort());
+  });
+});
+
+describe("multi-symbol reads say they do not preserve request order", () => {
+  const MULTI = [
+    "tastytrade_get_quote_snapshot",
+    "tastytrade_get_market_metrics",
+  ];
+
+  it.each(MULTI)("%s tells the caller to key by symbol", (name) => {
+    const description = TOOL_METADATA[name].description as string;
+    // These fan out per instrument bucket and relay what the broker returns, so
+    // the response order is not the request order and is not stable. A caller
+    // that zips the two lists positionally gets the wrong symbol's data.
+    // Deliberately narrow. A looser pattern matched "No state change, no order
+    // impact" — nothing to do with response ordering — so this test passed
+    // before the sentence it is supposed to require existed at all.
+    expect(description).toMatch(/request order|key(?:ed)? by symbol/i);
+  });
+});
