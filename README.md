@@ -5,10 +5,14 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for the
 access to quotes, instruments, option chains, balances, positions, transactions,
 watchlists, and order entry.
 
-**This server can place, edit, replace and cancel real orders.** Every
-money-moving tool is gated behind a dry-run-first confirmation flow, and the
-default endpoint is the sandbox. Read [Safety model](#safety-model) before you
-point it at production.
+**This server can place, edit, replace and cancel real orders, and its default
+endpoint is production — real money.** Production is the default because the
+sandbox does not serve market data: a server pointed there cannot quote, and a
+default that cannot do the job is not a safe default. One word switches it,
+`TASTYTRADE_ENV=sandbox`, and `TASTYTRADE_READ_ONLY=1` withholds every write and
+destructive tool. Read [Choosing an environment](#choosing-an-environment) and
+[Safety model](#safety-model) before you point this at an account you care
+about.
 
 > No tool, resource, prompt or example here is a recommendation to buy or sell
 > anything. Nothing in this repository is financial advice.
@@ -29,6 +33,12 @@ npm ci
 npm run build
 ```
 
+Clone-and-build is the supported install: nothing here is published to npm and
+there is no published container image. The included `Dockerfile` builds one
+locally if you would rather run the server in a container — read its header
+first, because a stdio server has to be started with `docker run -i`, and
+without that the container exits immediately and looks exactly like a crash.
+
 ## Credentials
 
 Authentication is **environment-only**. There is no interactive login flow: a
@@ -37,20 +47,93 @@ long-lived refresh token into a transcript, is not defensible.
 
 Create an OAuth client and refresh token out of band — see tastytrade's
 [OAuth2 guide](https://developer.tastytrade.com/oauth/), or
-**my.tastytrade.com → Manage → My Profile → API** — then supply four variables:
+**my.tastytrade.com → Manage → My Profile → API** — then supply three variables:
 
-| Variable                   | Required | Default                                     |
-| -------------------------- | -------- | ------------------------------------------- |
-| `TASTYTRADE_API_URL`       | no       | `https://api.cert.tastyworks.com` (sandbox) |
-| `TASTYTRADE_CLIENT_ID`     | yes      | —                                           |
-| `TASTYTRADE_CLIENT_SECRET` | yes      | —                                           |
-| `TASTYTRADE_REFRESH_TOKEN` | yes      | —                                           |
+| Variable                   | Required | Default |
+| -------------------------- | -------- | ------- |
+| `TASTYTRADE_CLIENT_ID`     | yes      | —       |
+| `TASTYTRADE_CLIENT_SECRET` | yes      | —       |
+| `TASTYTRADE_REFRESH_TOKEN` | yes      | —       |
+
+Which endpoint those credentials are sent to is a separate decision, and its
+default is production — see [Choosing an environment](#choosing-an-environment)
+below.
+
+**Sandbox credentials are a separate OAuth application, and the two sets are not
+interchangeable.** my.tastytrade.com issues production credentials; a sandbox
+client id, secret and refresh token are created under a sandbox user, with the
+tools on tastytrade's own sandbox page. A sandbox refresh token cannot mint an
+access token against production, and a production one cannot against the
+sandbox. That is worth knowing in advance because the failure is uninformative
+on its own: every tool call returns `auth_failed` and nothing says why. The
+preflight below names it outright, by comparing the issuer claim inside your
+refresh token against the endpoint you configured.
 
 Nothing in this repository auto-loads a `.env` file. Export the variables
 yourself, or hand them to the server through your MCP client's `env` block.
 `.env.sample` documents the same set.
 
-### Optional configuration
+## Choosing an environment
+
+**The default is production.** With nothing set, this server talks to
+`https://api.tastyworks.com`, and every order it places, edits, replaces or
+cancels is real and cannot be undone.
+
+| Variable             | Effect                                                                                                                                                               |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TASTYTRADE_ENV`     | `production` (also `prod`, `live`) or `sandbox` (also `cert`, `staging`, `sbx`). Case-insensitive, surrounding whitespace tolerated. Unset means production.         |
+| `TASTYTRADE_API_URL` | An explicit base URL. Wins over `TASTYTRADE_ENV`, and is the only way to reach a host that is not one of tastytrade's own — a gateway, a proxy, a local test double. |
+
+A `TASTYTRADE_ENV` this server cannot read — a typo like `sandbx` — resolves to
+the **sandbox**, and says so in a stderr banner that names the value. Unset is a
+default; a typo is a failed instruction, and the two must not land in the same
+place: an operator who tried to name an environment and misspelled it has not
+thereby granted permission to trade live funds. `TASTYTRADE_READ_ONLY` fails
+closed the same way, for the same reason — a value it cannot read enables
+read-only mode rather than disabling it.
+
+Three surfaces announce the environment, so it is not something anyone has to
+hold in their head:
+
+- **The stderr startup banner**, which therefore fires by default. It names the
+  endpoint, says that this is the default endpoint, and gives both switches:
+  `TASTYTRADE_ENV=sandbox` to move off it, and `TASTYTRADE_READ_ONLY=1` to
+  disable every write.
+- **`instructions` in the MCP initialize result** — the only environment signal
+  the agent itself can read, because stderr is a log file and `instructions` is
+  context. On production it says so in those terms: real money, real account
+  control, order actions that cannot be undone, and say which environment you
+  are in before acting. On the sandbox it says there is no real money and that
+  market data does not work. An endpoint this server does not recognise is
+  described as unrecognised and to be treated as production.
+- **An `environment` member on every order-submitting and dry-run result**, valued `production`,
+  `sandbox` or `other`, on all ten order routes — the five dry-runs and the five
+  submit/edit routes. Server-authored, never copied from upstream, so a
+  transcript is evidence of which environment an order actually went to.
+
+### What the sandbox cannot do
+
+The sandbox does not currently serve market data: `/market-data` and
+`/market-metrics` answer HTTP 502 on every route. So on the sandbox
+`tastytrade_get_quote`, `tastytrade_get_quote_snapshot`,
+`tastytrade_get_market_metrics`, `tastytrade_get_historical_dividends` and
+`tastytrade_get_earnings_reports` all fail — the last two sit under the same
+market-metrics prefix. Everything else works: instruments, option chains,
+futures, accounts, balances, positions, transactions, orders, and the dry-run
+and order-submission paths. tastytrade's own sandbox guide additionally lists
+market metrics and net-liquidating-value history
+(`tastytrade_get_net_liq_history`) as live-only, and notes that the sandbox
+resets every 24 hours, clearing trades, transactions and positions while leaving
+users and accounts intact.
+
+That is the whole reason production is the default. Quoting is the first thing
+anyone asks this server to do, and a default endpoint that cannot quote teaches
+an operator to override it without reading why.
+
+## Optional configuration
+
+Endpoint selection is [above](#choosing-an-environment); these are the remaining
+knobs, and every one of them has a working default.
 
 | Variable                            | Effect                                                                       |
 | ----------------------------------- | ---------------------------------------------------------------------------- |
@@ -67,8 +150,20 @@ yourself, or hand them to the server through your MCP client's `env` block.
 
 ## Run it
 
-The server speaks MCP over stdio and is normally launched by a client. Add it to
-your client's configuration:
+The server speaks MCP over stdio: a client launches it as a subprocess, talks
+JSON-RPC over stdin and stdout, and passes the credentials in from its own
+configuration. What is the same in every client is the command (`node`), the
+absolute path to `dist/index.js`, and the environment variables. What differs is
+the file that configuration lives in and the key it sits under — the `mcpServers`
+object below is what Claude Desktop and Claude Code read, while other clients
+(Cursor, Zed and Continue among them) keep their own file and do not all use the
+same key, so check your client's own documentation if it is not one of these
+two.
+
+**Claude Desktop** reads a file named `claude_desktop_config.json`. Its own
+Settings → Developer pane opens that file, which is the reliable way to find it;
+on macOS it sits in `~/Library/Application Support/Claude/`, and on Windows in
+`%APPDATA%\Claude\`.
 
 ```json
 {
@@ -77,7 +172,6 @@ your client's configuration:
       "command": "node",
       "args": ["/absolute/path/to/tastytrade-mcp/dist/index.js"],
       "env": {
-        "TASTYTRADE_API_URL": "https://api.cert.tastyworks.com",
         "TASTYTRADE_CLIENT_ID": "…",
         "TASTYTRADE_CLIENT_SECRET": "…",
         "TASTYTRADE_REFRESH_TOKEN": "…"
@@ -87,14 +181,70 @@ your client's configuration:
 }
 ```
 
-To run it directly for debugging: `node dist/index.js`. Startup diagnostics go to
-**stderr**; stdout carries the MCP protocol and nothing else.
+That block is **production**, because nothing in it selects an environment. Add
+`"TASTYTRADE_ENV": "sandbox"` to the `env` object for the sandbox, and
+`"TASTYTRADE_READ_ONLY": "1"` to withhold every write and destructive tool;
+every value in that object is a string, `"1"` included.
+
+On Windows the path is a JSON string like any other, so each backslash has to be
+doubled:
+
+```json
+{
+  "command": "node",
+  "args": ["C:\\Users\\you\\tastytrade-mcp\\dist\\index.js"]
+}
+```
+
+**Claude Code** takes the same server from the command line and writes the file
+for you:
+
+```bash
+claude mcp add tastytrade \
+  -e TASTYTRADE_CLIENT_ID=… \
+  -e TASTYTRADE_CLIENT_SECRET=… \
+  -e TASTYTRADE_REFRESH_TOKEN=… \
+  -- node /absolute/path/to/tastytrade-mcp/dist/index.js
+```
+
+Everything after `--` is the command to launch, so flags meant for the server
+are not read as flags for the CLI. That writes to your own configuration by
+default; `-s project` writes a `.mcp.json` into whatever project directory you
+run it from instead. That file carries the same `mcpServers` shape shown above
+and is meant to be committed and shared, which makes it the wrong place for a
+client secret or a refresh token.
+
+### Verify it works
+
+Two JSON-RPC lines on stdin are enough to prove the server starts and lists its
+tools. Neither call reaches tastytrade, so this works before the credentials are
+right:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"probe","version":"0"}}}' \
+  '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+  | node dist/index.js | cut -c1-200
+```
+
+The first reply is the `initialize` result, whose `instructions` field names the
+environment; the second is the tool list, which is large enough to be worth
+truncating (see [Tool surface](#tool-surface)). The MCP Inspector
+(`npx @modelcontextprotocol/inspector node dist/index.js`) does the same thing
+with a UI. For the credentials themselves, use the preflight below.
+
+Startup diagnostics — the production banner, the read-only banner, the
+credential-channel notes — go to **stderr**, because stdout carries the MCP
+protocol and nothing else. A client does not show you stderr in its chat window;
+it writes it to its own server log, and that log is where to look when a client
+reports that the server failed to start. Running `node dist/index.js` directly
+puts the same output on your terminal.
 
 ## Check your setup first
 
 When credentials are wrong, every tool call fails the same way. The bundled
 preflight tells you which of the four things is broken, in dependency order, and
-three of its checks need no network at all:
+six of its eleven checks need no network at all:
 
 ```bash
 npm run doctor          # or: node dist/doctor.js
@@ -113,25 +263,63 @@ Exit codes:
 - `3` — a check warned or was skipped, so the run is **not verified** even though
   nothing failed. Gate on `0` if you care; treat `0` and `3` alike if you do not.
 
+**A production deployment exits `3` on every run.** The endpoint check treats
+production as a warning — real money is at risk, and that is worth saying every
+time — and one warning is what exit `3` reports. Since production is the default,
+`3` is what a default configuration returns, and it means exactly what it says
+above: nothing failed, and nothing was certified either. So the advice in that
+last bullet needs one qualification — gating a production deployment on `0` alone
+will never pass. Read the report, and keep the hard stop for `1`.
+
 ## Tool surface
 
 **84 tools**: 70 read-only, 2 write, 12 destructive. The server also exposes MCP
 Resources (documentation bundles and computed account views) and Prompts
 (pre-composed tool-call plans).
 
-Every destructive tool requires a single-use `confirmation_token` issued by its
-matching `dry_run_*` tool. A token is valid for 60 seconds and is bound to a hash
-of the submitted arguments and of the request target.
+**Five tools require a confirmation token**, and they are the five that submit
+or change an order: `tastytrade_place_order`, `tastytrade_edit_order`,
+`tastytrade_replace_order`, `tastytrade_place_complex_order` and
+`tastytrade_edit_complex_order`. Each takes a single-use `confirmation_token`
+minted by its own `dry_run_*` tool, valid for 60 seconds and bound to a hash of
+the submitted arguments and of the request target.
+
+**The other seven destructive tools carry no token and have no dry-run.** They
+are `tastytrade_cancel_order` and `tastytrade_cancel_complex_order`,
+`tastytrade_delete_quote_alert`, and the four watchlist mutators
+`tastytrade_update_watchlist`, `tastytrade_delete_watchlist`,
+`tastytrade_add_watchlist_symbol` and `tastytrade_remove_watchlist_symbol`. Of
+those seven, only the two cancels touch orders; the other five move no money.
+They act on the first call, and each one says so in its own description.
+
+### Context cost
+
+The tool list is large, and it is worth knowing the number before you meet it.
+`tools/list` measures about 445 KB with all 84 tools, and about 349 KB with
+`TASTYTRADE_READ_ONLY=1`, which withholds 14 of them. Every tool carries a full
+`outputSchema`, and the descriptions are long deliberately — they are what the
+agent reads instead of this file, and they are where the order semantics and the
+failure modes are written down. That payload lands in the model's context at the
+start of every session, and the figures move with every schema change.
+
+Read-only mode is the only lever this server has over that today; there is no
+tool-filtering variable. Most work needs a handful of tools:
+`tastytrade_get_accounts`, `tastytrade_get_balances`, `tastytrade_get_positions`,
+`tastytrade_get_quote`, `tastytrade_get_option_chain_compact` and
+`tastytrade_get_live_orders`, and then `tastytrade_dry_run_order` followed by
+`tastytrade_place_order`. If your client lets you enable tools individually per
+server, that list is a reasonable place to start.
 
 ## Safety model
 
 The reason this project exists. In order of how much they protect you:
 
-1. **Dry-run-first confirmation.** A destructive order tool will not act without
-   a token from its own dry-run. The token is single-use, expires in 60 seconds,
-   and is bound to the arguments _and_ the endpoint the dry-run covered — so you
-   cannot dry-run one share and submit a thousand, or pre-flight one order and
-   submit a different one.
+1. **Dry-run-first confirmation.** The five order-submitting tools will not act
+   without a token from their own dry-run. The token is single-use, expires in
+   60 seconds, and is bound to the arguments _and_ the endpoint the dry-run
+   covered — so you cannot dry-run one share and submit a thousand, or pre-flight
+   one order and submit a different one. It covers those five and none of the
+   other destructive tools; [Tool surface](#tool-surface) names both groups.
 2. **Pre-submit sanity checks.** Per-leg quantities against the account's own
    published order-size ceilings, a notional cap on buying-power impact, and a
    refusal to send orders into frozen or closing-only accounts. Every result
@@ -156,6 +344,10 @@ The reason this project exists. In order of how much they protect you:
   redeems it. It proves recency and identity of arguments, not intent.
 - **A cancel is not automatically safe.** Cancelling a protective stop or a
   working hedge changes your risk immediately, and cancels carry no token.
+- **Seven destructive tools act on the first call.** The two cancels, the
+  quote-alert delete, and the four watchlist mutators have no dry-run and take
+  no confirmation token. Nothing in that set moves money except the cancels, but
+  a watchlist this server overwrites or deletes cannot be restored by it.
 - **Safety state is in-memory and single-process.** Correct for one stdio
   session; a multi-replica deployment would need a shared store.
 

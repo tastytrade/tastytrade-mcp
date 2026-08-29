@@ -1,10 +1,10 @@
 # Dependabot — automated dependency updates.
 #
-# WHY THIS EXISTS. This tree once carried a pile of open advisories with nothing
-# watching it. `./build.sh` stage 7 now fails the build on any HIGH or CRITICAL
-# advisory, so the problem cannot ship — but a gate only speaks when somebody
-# runs it. Dependabot is what turns "we would have found out eventually" into a
-# pull request that arrives on its own.
+# WHY THIS EXISTS. `./build.sh` stage 7 fails the build on any HIGH or CRITICAL
+# advisory, so nothing carrying one ships through the gate — but a gate only
+# speaks when somebody runs it, and an advisory published today does not wait
+# for the next commit. Dependabot is the other half: the pull request arrives on
+# its own schedule, whether or not anyone thought to look.
 #
 # A Dependabot pull request can go green here without help: ci.yml triggers on
 # `pull_request` with no branch filter, so the branch gets the full eight-stage
@@ -86,13 +86,13 @@ updates:
         #
         # It ships formatting changes in MINOR releases, and the gate checks
         # formatting, so a prettier bump is never just a version bump — it is a
-        # version bump plus a reformat that no bot can produce. Inside a wildcard
-        # group that made every other dev update fail with it: a group is green
-        # only if every member is, and this one structurally cannot be.
+        # version bump plus a reformat that no bot can produce. A wildcard group
+        # is green only if every member is, and a prettier bump structurally
+        # cannot be, so it is excluded rather than allowed to fail the group.
         #
-        # The version in package.json is pinned exactly for the same reason. A
-        # caret range let 3.8.3 become 3.9.6 as a lockfile-only change, with no
-        # manifest diff to review and no signal that formatting had moved.
+        # The version in package.json is pinned exactly for the same reason: an
+        # exact pin is what makes a formatting move arrive as a manifest diff to
+        # review, rather than as a lockfile-only change with no signal at all.
         exclude-patterns:
           - "prettier"
       # No group for the two runtime dependencies (@modelcontextprotocol/sdk and

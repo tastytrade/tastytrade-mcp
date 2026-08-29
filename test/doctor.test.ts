@@ -84,6 +84,9 @@ import type {
 // doctor agrees with the module the server actually enforces, not merely with
 // the shared module both of them import.
 import {
+  API_ENV_VAR,
+  apiEnvironmentOf,
+  resolveApiEndpoint,
   SANDBOX_API_URL as DISPATCHER_SANDBOX_API_URL,
   PRODUCTION_API_URL as DISPATCHER_PRODUCTION_API_URL,
   READ_ONLY_ENV_VAR as DISPATCHER_READ_ONLY_ENV_VAR,
@@ -278,9 +281,16 @@ function makeDeps(overrides: Partial<DoctorDeps> = {}): DoctorDeps {
   };
 }
 
-/** The environment of a healthy sandbox deployment. */
+/**
+ * The environment of a healthy sandbox deployment.
+ *
+ * The sandbox is named explicitly rather than left to the default, because the
+ * default is PRODUCTION. These fixtures describe a sandbox deployment and must
+ * keep describing one no matter what the default becomes.
+ */
 function healthyEnv(extra: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
+    [API_ENV_VAR]: "sandbox",
     TASTYTRADE_CLIENT_ID: CLIENT_ID,
     TASTYTRADE_CLIENT_SECRET: CLIENT_SECRET,
     TASTYTRADE_REFRESH_TOKEN: GOOD_REFRESH_TOKEN,
@@ -347,16 +357,95 @@ describe("configuration copied from the dispatcher", () => {
   });
 
   it.each([
-    [undefined, SANDBOX_API_URL],
-    ["", SANDBOX_API_URL],
-    ["   ", SANDBOX_API_URL],
+    // Unset, or set to nothing readable, is the DEFAULT — and the default is
+    // PRODUCTION. The sandbox does not serve market data, so a server defaulted
+    // there cannot quote; a default that cannot do the job is not a safe
+    // default, it is one that teaches an operator to override it unread.
+    [undefined, PRODUCTION_API_URL],
+    ["", PRODUCTION_API_URL],
+    ["   ", PRODUCTION_API_URL],
     ["  https://api.tastyworks.com  ", "https://api.tastyworks.com"],
+    ["https://api.cert.tastyworks.com", "https://api.cert.tastyworks.com"],
     ["https://example.test", "https://example.test"],
   ])("resolves TASTYTRADE_API_URL=%s like the dispatcher", (raw, expected) => {
     const env: NodeJS.ProcessEnv =
       raw === undefined ? {} : { TASTYTRADE_API_URL: raw };
     expect(inspectApiUrl(env).apiUrl).toBe(expected);
     expect(resolveApiUrl(env)).toBe(expected);
+  });
+
+  it.each([
+    ["production", PRODUCTION_API_URL],
+    ["prod", PRODUCTION_API_URL],
+    ["live", PRODUCTION_API_URL],
+    ["PRODUCTION", PRODUCTION_API_URL],
+    ["  Prod  ", PRODUCTION_API_URL],
+    ["sandbox", SANDBOX_API_URL],
+    ["cert", SANDBOX_API_URL],
+    ["staging", SANDBOX_API_URL],
+    ["sbx", SANDBOX_API_URL],
+    ["  SANDBOX  ", SANDBOX_API_URL],
+    // Fail-closed: a value that is SET but unreadable resolves to the SANDBOX.
+    // An operator who tried to name an environment and misspelled it must not
+    // have that read as permission to trade real money. Unset is a default; a
+    // typo is a failed instruction, and the two must not land in the same place.
+    ["sandbx", SANDBOX_API_URL],
+    ["produciton", SANDBOX_API_URL],
+    ["yes", SANDBOX_API_URL],
+  ])("resolves TASTYTRADE_ENV=%s like the dispatcher", (raw, expected) => {
+    const env: NodeJS.ProcessEnv = { [API_ENV_VAR]: raw };
+    expect(inspectApiUrl(env).apiUrl).toBe(expected);
+    expect(resolveApiUrl(env)).toBe(expected);
+  });
+
+  it("lets TASTYTRADE_API_URL win over TASTYTRADE_ENV", () => {
+    // The URL is the escape hatch for a gateway or a test double, so it has to
+    // beat the friendly selector rather than be silently ignored.
+    const env: NodeJS.ProcessEnv = {
+      [API_ENV_VAR]: "sandbox",
+      TASTYTRADE_API_URL: "https://example.test",
+    };
+    expect(resolveApiUrl(env)).toBe("https://example.test");
+    expect(inspectApiUrl(env).apiUrl).toBe("https://example.test");
+    expect(resolveApiEndpoint(env).source).toBe("TASTYTRADE_API_URL");
+  });
+
+  it("reports an unreadable TASTYTRADE_ENV so a caller can say so", () => {
+    const r = resolveApiEndpoint({ [API_ENV_VAR]: "sandbx" });
+    expect(r.apiUrl).toBe(SANDBOX_API_URL);
+    expect(r.unrecognisedEnvValue).toBe("sandbx");
+    // A value that WAS read leaves the field absent, so the caller cannot warn
+    // about a setting the operator got right.
+    expect(
+      resolveApiEndpoint({ [API_ENV_VAR]: "sandbox" }).unrecognisedEnvValue,
+    ).toBeUndefined();
+    expect(resolveApiEndpoint({}).unrecognisedEnvValue).toBeUndefined();
+    expect(resolveApiEndpoint({}).source).toBe("default");
+  });
+
+  it("agrees with classifyApiHost about every host it recognises", () => {
+    // Two functions decide whether real money is involved: classifyApiHost
+    // labels a host for the preflight, apiEnvironmentOf classifies a URL for the
+    // dispatcher's own surface. They read the same hosts through the same
+    // normaliseHostname, and this is what stops them drifting apart.
+    for (const host of [
+      "api.tastyworks.com",
+      "api.tastyworks.com.",
+      "api.cert.tastyworks.com",
+      "api.cert.tastyworks.com.",
+      "api.sandbox.tastytrade.com",
+    ]) {
+      expect(apiEnvironmentOf(`https://${host}`)).toBe(
+        classifyApiHost(host).environment,
+      );
+    }
+    // And the cases only the preflight distinguishes collapse to "other" here,
+    // which is the conservative answer: an endpoint this server cannot vouch
+    // for is one it must not describe as a sandbox.
+    for (const host of ["api.sandbox.tastyworks.com", "example.test"]) {
+      expect(apiEnvironmentOf(`https://${host}`)).toBe("other");
+      expect(classifyApiHost(host).environment).not.toBe("production");
+    }
   });
 
   it("takes the notional-cap default from the safety layer", () => {
@@ -463,8 +552,24 @@ describe("check 1: credentials", () => {
 // ---------------------------------------------------------------------------
 
 describe("check 2: API endpoint", () => {
-  it("passes and names the sandbox when the variable is unset", () => {
+  it("names PRODUCTION when nothing is set, and warns about it", () => {
+    // The default is production, so the unconfigured case is the loud one. The
+    // preflight warning is not a failure: exit 3 means "warned", and a
+    // production deployment is expected to warn every time it runs.
     const state = inspectApiUrl({});
+    expect(state.apiUrl).toBe(PRODUCTION_API_URL);
+    expect(state.check.status).toBe("warn");
+    expect(state.check.summary).toContain("PRODUCTION");
+    expect(state.target).toEqual({
+      host: "api.tastyworks.com",
+      port: 443,
+      secure: true,
+    });
+    expect(state.check.data?.environment).toBe("production");
+  });
+
+  it("passes and names the sandbox when TASTYTRADE_ENV asks for it", () => {
+    const state = inspectApiUrl({ [API_ENV_VAR]: "sandbox" });
     expect(state.check.status).toBe("pass");
     expect(state.apiUrl).toBe(SANDBOX_API_URL);
     expect(state.target).toEqual({
@@ -472,9 +577,6 @@ describe("check 2: API endpoint", () => {
       port: 443,
       secure: true,
     });
-    expect(state.check.details.join("\n")).toContain(
-      "TASTYTRADE_API_URL is unset",
-    );
     expect(state.check.data?.environment).toBe("sandbox");
   });
 

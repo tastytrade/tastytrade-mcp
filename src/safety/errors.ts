@@ -209,10 +209,10 @@ export function normalizeKeyName(key: string): string {
 /**
  * Credential words matched as a SUBSTRING of the normalized key name.
  *
- * The rule is deliberately "contains", not "equals": the previous
- * fully-anchored list let `token`, `remember-token`, `x-api-key` and
- * `x-auth-token` carry a live credential straight into the envelope, because a
- * hostile or merely sloppy upstream picks the key name, not us. Nothing in this
+ * The rule is deliberately "contains", not "equals": a fully-anchored list would
+ * let `token`, `remember-token`, `x-api-key` and `x-auth-token` carry a live
+ * credential straight into the envelope, because a hostile or merely sloppy
+ * upstream picks the key name, not us. Nothing in this
  * domain is innocently named after these words, so no boundary is needed — and
  * the next vendor-invented spelling (`customer-token`, `totp_secret`,
  * `sessionCookie`) is covered without anyone editing this file.
@@ -388,8 +388,10 @@ const SECRET_ENV_VARS = [
  * Credential literals registered by a caller that did not put them in the
  * environment.
  *
- * `process.env` alone is complete for the shipped stdio server, which reads all
- * three vars and passes them into the client config. It stops being complete the
+ * `process.env` alone is complete for the shipped stdio server, which reads the
+ * client id, the client secret and the refresh token from it and passes them into
+ * the client config. The other name in SECRET_ENV_VARS is scrubbed defensively
+ * rather than read: nothing here consumes it as configuration. It stops being complete the
  * moment `TastytradeClient` is constructed programmatically with credentials in
  * the config object and nothing in the environment: `configuredSecrets()` returns
  * an empty list, and an upstream `error_description` echoing the client secret is

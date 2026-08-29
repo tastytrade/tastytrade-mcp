@@ -189,8 +189,10 @@ interface DryRunLike {
  * Used for all three payloads this function is handed from the network: the
  * dry-run verdict (a hard block), the account position limits (a warning) and
  * the account trading status (a warning). All three go through the same
- * predicate on purpose — the trading-status read was the one left out, and it
- * fail-opened the only checks in here that hard-block on account state.
+ * predicate on purpose. The trading status is the payload carrying the only
+ * checks in here that HARD-BLOCK on account state, so it is where the rule bites
+ * hardest: a payload that cannot be read must never read as a check that passed.
+ * One predicate for all three is what makes that unbranchable.
  */
 function isReadablePayload(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -281,12 +283,12 @@ function describedAnOrder(dryRun: Record<string, unknown>): boolean {
  *
  * The COUNT axis, and it is a separate bound from the per-note one for a reason
  * that was measured rather than assumed: `clipBrokerNote` caps ONE note at 240
- * characters and applies faithfully to every note, and `dryRunNotes` never asked
- * how many notes there were. So N notes produced N x 263 characters, and at
- * N = 5,000 — every element individually inside the cap — the note list came out
- * at 653,890 characters in a 668,959-byte envelope, with the server's own
- * findings buried five thousand elements down. Tightening MAX_BROKER_NOTE_CHARS
- * does nothing about that; only bounding the count does.
+ * characters and applies faithfully to every note, which leaves N notes free to
+ * cost N x 263 characters. Measured with the count unbounded at N = 5,000 — every
+ * element individually inside the per-note cap — the note list came out at 653,890
+ * characters in a 668,959-byte envelope, with the server's own findings buried
+ * five thousand elements down. Tightening MAX_BROKER_NOTE_CHARS does nothing
+ * about that; only bounding the count does.
  *
  * 20 notes at 240 characters caps the channel at roughly 5 KB — two orders of
  * magnitude below the measured exposure, and generous against real tastytrade
@@ -368,9 +370,10 @@ const MAX_BROKER_NOTE_CHARS = 240;
  * trick to an account number. `boundedText` flattens the break class to spaces
  * and removes the invisible-format class outright.
  *
- * The shared helper rather than a second local stripper, deliberately. The
- * tree's whole problem here was one stripper on one surface: whichever
- * chokepoint you happened to be reading told you nothing about the others.
+ * The shared helper rather than a second local stripper, deliberately. One
+ * stripper per surface is a shape where the chokepoint you happen to be reading
+ * tells you nothing about the others; `boundedText` is the single spelling of
+ * this rule, so reading it once is reading every surface that applies it.
  */
 function clipBrokerNote(text: string): string {
   return boundedText(text, { maxChars: MAX_BROKER_NOTE_CHARS });
@@ -439,10 +442,10 @@ function renderDryRunNote(value: unknown): string {
  * carrying `errors` never mints a token, because `isCleanDryRun` and
  * `assertNoDryRunErrors` call the same `hasDryRunErrors` predicate. Defence in
  * depth, in the same shape step 1c of `runSanityChecks` already applies, and the
- * count bound costs nothing here. Left unbounded it was the more dangerous of
- * the two anyway: this rendering is JOINED INTO ONE STRING and becomes a
- * `sanity_check_failed` message, so 5,000 notes made a 338,905-character
- * refusal.
+ * count bound costs nothing here. It is also the more dangerous of the two to
+ * leave unbounded: this rendering is JOINED INTO ONE STRING and becomes a
+ * `sanity_check_failed` message, measured with the count unbounded at 338,905
+ * characters of refusal for 5,000 notes.
  */
 function describeDryRunErrors(errors: unknown): string {
   const batch = dryRunNotes(errors);
@@ -461,14 +464,14 @@ function describeDryRunErrors(errors: unknown): string {
  * The single gate on "may this dry-run mint a confirmation token?".
  *
  * Three questions, and all three have to be answered yes: the payload can be
- * read at all, it reports no errors, and it describes an order. The third was
- * missing, and its absence meant "the broker did not complain" was being
- * accepted as "the broker approved" — see `describedAnOrder`.
+ * read at all, it reports no errors, and it describes an order. The third is
+ * what stops "the broker did not complain" being accepted as "the broker
+ * approved" — see `describedAnOrder`.
  *
  * Exported so the dispatcher's issuance check and `runSanityChecks`' own
- * re-check are literally the same predicate — the previous pair of duplicated
- * `!dryRun?.errors?.length` tests could (and did) drift from what the submit
- * path enforces.
+ * re-check are literally the same predicate. Two hand-written
+ * `!dryRun?.errors?.length` tests, one per site, are a pair that can drift from
+ * what the submit path enforces; one exported predicate cannot.
  */
 export function isCleanDryRun(dryRun: unknown): boolean {
   return (
@@ -496,9 +499,9 @@ export const DEFAULT_MAX_ORDER_NOTIONAL_USD = 50_000;
  *
  * Anything unusable — `50k`, `$50000`, `50,000`, `Infinity`, an empty string, a
  * negative, a zero — falls back to the documented default and reports itself.
- * The previous `Number.isFinite(...)` guard skipped the entire check on those
- * inputs, so a fat-fingered value silently removed the ceiling the operator
- * believed they had configured.
+ * Falling back rather than declining to compare is the whole point: a guard that
+ * simply skips the check on a value it cannot parse lets a fat-fingered env var
+ * remove the ceiling the operator believes they configured, and say nothing.
  */
 function resolveNotionalCap(): { limit: number; warning?: string } {
   const raw = process.env.MAX_ORDER_NOTIONAL_USD;
@@ -583,14 +586,14 @@ function describeSymbol(symbol: unknown): string {
  * module can read.
  *
  * Total on purpose, for the same reason `describeQuantity` is. The field arrives
- * from an agent, the tool schema's `enum` is advisory (the MCP SDK does not
- * validate arguments against it), and the previous
- * `(leg["instrument-type"] ?? "").includes(…)` raised a bare TypeError on a
- * numeric or object value — reaching the agent as `upstream_error:
- * "type.includes is not a function"`, from inside the module whose whole job is
- * to keep raw JavaScript diagnostics out of the taxonomy, and AFTER
- * `consumeToken` has already burned the confirmation token. An unreadable type
- * is now simply a type with no published ceiling, and is disclosed as one.
+ * from an agent and the tool schema's `enum` is advisory — the MCP SDK does not
+ * validate arguments against it — so a numeric or object value reaches this
+ * module untouched. A bare `(leg["instrument-type"] ?? "").includes(…)` raises a
+ * TypeError on one, which would reach the agent as `upstream_error:
+ * "type.includes is not a function"` from inside the module whose whole job is to
+ * keep raw JavaScript diagnostics out of the taxonomy, and AFTER `consumeToken`
+ * has already burned the confirmation token. Here an unreadable type is simply a
+ * type with no published ceiling, and is disclosed as one.
  */
 function instrumentTypeOf(leg: OrderLeg): string {
   const raw: unknown = leg["instrument-type"];
@@ -607,11 +610,12 @@ function describeInstrumentType(type: string): string {
  *
  * Fail-closed, and the direction is the whole point: this decides whether an
  * order may enter a closing-only account, so "we could not read the action" has
- * to count as "it might open". `leg.action?.includes("to Open")` did the
- * opposite of that in two different ways — a non-string action raised a bare
- * TypeError (same shape as the instrument-type fault above), and had that been
- * "fixed" by simply guarding the call, an unreadable action would have read as
- * a closing leg and been waved into an account that may not open positions.
+ * to count as "it might open". A bare `leg.action?.includes("to Open")` gets that
+ * wrong twice over — a non-string action raises a TypeError, the same shape the
+ * instrument-type read above rules out, and merely guarding the call would leave
+ * an unreadable action reading as a CLOSING leg, waved into an account that may
+ * not open positions. So the type test comes first and its failure means "might
+ * open".
  */
 function mayOpenPosition(leg: OrderLeg): boolean {
   const action: unknown = leg.action;
@@ -751,9 +755,10 @@ export const UNCEILINGED_ORDER_LEG_INSTRUMENT_TYPES: readonly string[] =
  *
  * Numeric STRINGS are accepted for exactly the reason `usableLegQuantity`
  * accepts them — the API sends and accepts decimal strings — so both sides of
- * the comparison speak one dialect. They did not: the quantity side went out of
- * its way to parse `"100"`, while the limit side required a JSON number, so a
- * string-typed ceiling silently disabled the check for that leg.
+ * the comparison speak one dialect. That symmetry is load-bearing: a quantity
+ * side that parses `"100"` against a limit side that demands a JSON number turns
+ * a string-typed ceiling into no ceiling at all for that leg, and the check then
+ * reports nothing at all.
  *
  * Zero is usable and BINDING: an account capped at zero for an instrument class
  * may not trade it, and reading that as "no limit configured" would invert the
@@ -778,18 +783,18 @@ function usableOrderSizeLimit(raw: unknown): number | null {
 /**
  * What actually bounds a leg whose instrument class publishes no size cap.
  *
- * The previous wording asserted those legs "were bounded by
- * MAX_ORDER_NOTIONAL_USD and server-side enforcement only" — an affirmative
- * claim that the notional cap bounded them. It can be false in the very same
- * response: `applyNotionalCap` runs immediately after this loop and may append
- * "Dry-run reported no usable change-in-buying-power, so the
- * MAX_ORDER_NOTIONAL_USD cap could not be applied to this order." Both land in
- * one `sanity_warnings` array, in that order, and a reader who stops at the
- * first is told the opposite of the truth.
+ * The claim is CONDITIONAL, and it has to be. An unqualified "these legs are
+ * bounded by MAX_ORDER_NOTIONAL_USD and server-side enforcement" asserts that the
+ * notional cap bounded them, and that can be false in the very same response:
+ * `applyNotionalCap` runs immediately after this loop and may append "Dry-run
+ * reported no usable change-in-buying-power, so the MAX_ORDER_NOTIONAL_USD cap
+ * could not be applied to this order." Both land in one `sanity_warnings` array,
+ * in that order, and a reader who stopped at the first would be told the opposite
+ * of the truth.
  *
- * So the claim is conditional here, the way it already is in the tool
- * descriptions. One constant for both warnings, for the same reason
- * STATUS_BACKSTOP is one constant: they are the same fact.
+ * So it is conditional here, the way it is in the tool descriptions. One constant
+ * for both warnings, for the same reason STATUS_BACKSTOP is one constant: they
+ * are the same fact.
  */
 const UNCAPPED_LEG_BOUNDS =
   "Legs with no published size ceiling are left to MAX_ORDER_NOTIONAL_USD and " +
@@ -805,8 +810,10 @@ const SERVER_SIDE_BACKSTOP = "relying on server-side enforcement.";
  *
  * One constant for both trading-status warnings — the endpoint that threw and
  * the endpoint that answered with something unreadable. They are the same fact
- * from the caller's side ("this account was not checked"), and stating it two
- * ways invites exactly the drift that left one of them unwritten for a round.
+ * from the caller's side ("this account was not checked"), and two independent
+ * spellings of one fact are two things to keep in step. The way that drift shows
+ * up is one of the two paths disclosing nothing, which is the single outcome this
+ * module rules out.
  */
 const STATUS_BACKSTOP = "submit may still bounce upstream.";
 
@@ -827,11 +834,13 @@ const ACCOUNT_STATE_CHECKS = ACCOUNT_STATE_FLAGS.join(" / ");
  * Every pre-submit check this module can run, under the id it is DISCLOSED as.
  *
  * DATA because the alternative is prose, and prose goes out of sync.
- * `runSanityChecks` pushes a warning for every way its checks can fail to run;
- * the three legless routes ran a strict subset and pushed NOTHING, so
- * `sanity_warnings: []` from an edit on a frozen account was byte-identical to
- * the same from a fully checked healthy one — "checked, nothing found" and "never
- * checked" are the two answers that matter most.
+ * `runSanityChecks` pushes a warning for every way its checks can fail to run,
+ * but a warning list cannot by itself carry the difference between "checked,
+ * nothing found" and "never checked" — and those are the two answers that matter
+ * most. The three legless routes run a strict subset by design, so on a warning
+ * list alone `sanity_warnings: []` from an edit that would OPEN a position on a
+ * closing-only account would be byte-identical to the same from a fully checked
+ * healthy one — that check reads the order's legs, and those bodies carry none.
  *
  * Each entry point accumulates the ids it evaluated and the difference travels
  * back as `checksNotRun`, so a route that skips a check discloses it by
@@ -1086,8 +1095,9 @@ function applyNotionalCap(dry: DryRunLike, warnings: string[]): void {
  * brackets, and this is the field a human reads to find out why a live order is
  * about to bounce.
  *
- * A helper rather than two copies: there are two gated routes into it, and the
- * whole defect above was one field of one payload handled two ways.
+ * A helper rather than two copies: there are two gated routes into it, and one
+ * field of one payload handled two ways is the exact shape both hazards above
+ * take.
  */
 function collectDryRunWarnings(
   dry: DryRunLike,
@@ -1150,9 +1160,11 @@ export async function runAccountStateChecks(
   const ran = new Set<SanityCheckId>();
   const done = () => ({ warnings, ran: [...ran] });
 
-  // GET /accounts/{n}/trading-status has a published 1/sec ceiling, and until
-  // this charge existed the limiter's own notes claimed no tool reached it —
-  // while this line reached it on every live submit.
+  // GET /accounts/{n}/trading-status has a published 1/sec ceiling, and this
+  // line reaches it on every live submit — a request NO TOOL CHARGES,
+  // because it belongs to no tool: the destructive schemas do document that it
+  // happens, but a tool's pre-flight bills the tool's own bucket, not this one. Charged here so the ceiling governs it:
+  // an unbilled request is a request the limiter does not know about.
   chargeUpstreamCallDebt({ rateKey: "trading_status" });
   let rawStatus: unknown;
   try {
@@ -1170,16 +1182,16 @@ export async function runAccountStateChecks(
   }
 
   if (!isReadablePayload(rawStatus)) {
-    // Fetched, but not something fields can be read off. Exactly the treatment
-    // the position-limit half above already had, and it was missing here on the
-    // one pair of checks that HARD BLOCK: a 200 `{"data": null}` — a shape the
-    // strict envelope deliberately admits — resolved to null, `if (status)` was
-    // false, and the frozen and closing-only blocks were skipped with an empty
-    // warning list. `{data: []}`, `{data: "frozen"}` and `{data: 5}` were worse
-    // still: truthy, so every field read came back undefined and the account
-    // reported healthy. The throwing path warned and this one did not, which is
-    // the asymmetry the module header rules out — the caller is ALWAYS told
-    // which checks did not run.
+    // Fetched, but not something fields can be read off — exactly the treatment
+    // the position-limit half above gets, and it matters most here, on the one
+    // pair of checks that HARD BLOCK. A 200 `{"data": null}` — a shape the strict
+    // envelope deliberately admits — resolves to null, so a bare `if (status)`
+    // would skip the frozen and closing-only blocks with an empty warning list.
+    // `{data: []}`, `{data: "frozen"}` and `{data: 5}` are worse still: truthy,
+    // so every field read comes back undefined and the account reports healthy.
+    // The throwing path warns and so does this one; the module header admits no
+    // asymmetry between them — the caller is ALWAYS told which checks did not
+    // run.
     warnings.push(
       `Account trading status came back ${describeUnreadablePayload(rawStatus)}, ` +
         `so the ${ACCOUNT_STATE_CHECKS} checks did not run — ${STATUS_BACKSTOP}`,
@@ -1444,11 +1456,11 @@ export async function runSanityChecks(
 
   // 1c. Hard-fail on a dry-run that described no order. Defence in depth, in
   // the same shape as 1b: `isCleanDryRun` already refuses to mint a token from
-  // one, so the dispatcher cannot hand this function such a payload today. Both
-  // guards are here because both were once absent, and because the check
-  // immediately below — the notional cap — reads its figure off the very member
-  // this one insists on. A submit that reaches step 3 with nothing to measure
-  // downgrades MAX_ORDER_NOTIONAL_USD to a warning, which is the loudest thing
+  // one, so the dispatcher cannot hand this function such a payload today. The
+  // guard is stated at both layers anyway, because the check immediately below —
+  // the notional cap — reads its figure off the very member this one insists on.
+  // A submit that reached step 3 with nothing to measure would downgrade
+  // MAX_ORDER_NOTIONAL_USD to a warning, which is the loudest thing
   // this module knows how to say about an order it could not check, and it is
   // still only a string in an array.
   if (!describedAnOrder(dry)) {
@@ -1652,8 +1664,8 @@ export async function runSanityChecks(
   ran.add("notional_cap");
 
   // 4. Surface any dry-run warnings — into the UPSTREAM channel, never into
-  // this server's own. See SanityCheckOutcome for what went wrong when there
-  // was only one array.
+  // this server's own. See SanityCheckOutcome for why one array with two
+  // authors cannot carry this.
   collectDryRunWarnings(dry, warnings, upstreamNotes);
 
   // 5. Account state — the same helper, and the same hard block, the three

@@ -41,9 +41,11 @@ Left intentionally intact: instrument reference data, prices, timestamps,
 numeric order ids, and `ext-client-order-id` (opaque per-order handles, tied to
 an account number that is now fake).
 
-Verified with `gitleaks dir .` — 1 leak before, 0 after. The gate re-runs that
-scan over the whole tree on every build, so a future re-recording that forgets
-the scrub fails rather than lands.
+Verified with `gitleaks dir .` — 1 leak before, 0 after. Stage 8 of `./build.sh`
+scans the tracked tree on every build, so a future re-recording that forgets the
+scrub fails rather than lands. Note the two scans differ in scope: the gate reads
+the content of tracked files only, so an untracked scratch payload beside these
+is scanned by `gitleaks dir .` and not by the gate.
 
 ## 2. Long arrays truncated to 4 items
 

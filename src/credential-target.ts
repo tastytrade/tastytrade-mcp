@@ -6,11 +6,11 @@
  * credentials and dial an operator-supplied URL with them — the MCP server, which
  * refuses to start, and the preflight CLI, which reports and continues.
  *
- * Two guards for one rule is how they drift, and that drift was the gap: a doctor
- * with its own copy of the endpoint constants warned where the server refused, then
- * POSTed the full credential set to whatever TASTYTRADE_API_URL named — the command
- * the README tells an operator to run FIRST. So the decision lives here and both
- * entry points call it.
+ * Two guards for one rule is how they drift, so the decision lives HERE and both
+ * entry points call it. A second copy of the endpoint constants is a copy that can
+ * warn where the server refuses — and the preflight is the command the README tells
+ * an operator to run first, carrying the full credential set to whatever URL it was
+ * given, so the two must answer identically about every host.
  *
  * Nothing here prints, throws or reads `process.env` except
  * {@link assertCredentialTargetAllowed}, the server's enforcement wrapper. Keeping
@@ -27,11 +27,144 @@ import * as tls from "node:tls";
 
 import { toolError } from "./safety/errors.js";
 
-/** tastytrade sandbox ("cert") API. The default — no real money involved. */
+/** tastytrade sandbox ("cert") API. No real money involved. */
 export const SANDBOX_API_URL = "https://api.cert.tastyworks.com";
 
-/** tastytrade production API. Real accounts, real funds. Opt-in only. */
+/** tastytrade production API. Real accounts, real funds. THE DEFAULT. */
 export const PRODUCTION_API_URL = "https://api.tastyworks.com";
+
+/** Env var naming the API base URL outright. Wins over {@link API_ENV_VAR}. */
+export const API_URL_ENV_VAR = "TASTYTRADE_API_URL";
+
+/** Env var selecting an environment by name, so the common case is one word. */
+export const API_ENV_VAR = "TASTYTRADE_ENV";
+
+/** Accepted spellings for production. */
+const ENV_PRODUCTION: ReadonlySet<string> = new Set([
+  "production",
+  "prod",
+  "live",
+]);
+
+/** Accepted spellings for the sandbox. "staging" is included because that is
+ * what the environment is called colloquially, and an operator who writes it
+ * means the sandbox. */
+const ENV_SANDBOX: ReadonlySet<string> = new Set([
+  "sandbox",
+  "cert",
+  "staging",
+  "sbx",
+]);
+
+/** Which input decided the endpoint. */
+export type ApiUrlSource =
+  typeof API_URL_ENV_VAR | typeof API_ENV_VAR | "default";
+
+export interface ApiEndpointResolution {
+  /** The base URL the server will actually use. */
+  apiUrl: string;
+  source: ApiUrlSource;
+  /**
+   * The raw {@link API_ENV_VAR} value, when one was set but could not be read.
+   *
+   * Present only in that case, so a caller can say so loudly. The resolution
+   * itself has already fallen back to the SANDBOX — see below.
+   */
+  unrecognisedEnvValue?: string;
+}
+
+/**
+ * Resolve the API base URL from the environment.
+ *
+ * THE DEFAULT IS PRODUCTION. That is a deliberate reversal: the sandbox does
+ * not serve market data, so a server pointed there cannot quote, and a default
+ * that cannot do the job is not a safe default — it is a broken one that
+ * teaches an operator to override it without reading why. Production is
+ * therefore the default, and every surface says so out loud: the startup
+ * banner, the `instructions` the client receives on initialize, and the
+ * `environment` member on every order result.
+ *
+ * Precedence, highest first:
+ *   1. TASTYTRADE_API_URL — an explicit URL, for a gateway, a proxy or a test
+ *      double. Unchanged in meaning, and still the only way to reach a host
+ *      that is not one of tastytrade's own.
+ *   2. TASTYTRADE_ENV — `production` | `sandbox` (with `prod`/`live` and
+ *      `cert`/`staging`/`sbx` accepted), so switching is one word.
+ *   3. Nothing set — PRODUCTION.
+ *
+ * A TASTYTRADE_ENV that is SET but unreadable resolves to the SANDBOX, not to
+ * production. An operator who wrote something meant to select an environment
+ * and misspelled it must not have that read as permission to trade real money;
+ * the same rule the read-only switch follows for the same reason. Note this is
+ * not the same case as "unset": unset is a default, a typo is a failed
+ * instruction.
+ */
+export function resolveApiEndpoint(
+  env: NodeJS.ProcessEnv = process.env,
+): ApiEndpointResolution {
+  const explicit = env[API_URL_ENV_VAR]?.trim();
+  if (explicit) return { apiUrl: explicit, source: API_URL_ENV_VAR };
+
+  const raw = env[API_ENV_VAR];
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const value = raw.trim().toLowerCase();
+    if (ENV_SANDBOX.has(value))
+      return { apiUrl: SANDBOX_API_URL, source: API_ENV_VAR };
+    if (ENV_PRODUCTION.has(value))
+      return { apiUrl: PRODUCTION_API_URL, source: API_ENV_VAR };
+    return {
+      apiUrl: SANDBOX_API_URL,
+      source: API_ENV_VAR,
+      unrecognisedEnvValue: raw,
+    };
+  }
+
+  return { apiUrl: PRODUCTION_API_URL, source: "default" };
+}
+
+/** The base URL the server will use. Thin wrapper over {@link resolveApiEndpoint}. */
+export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
+  return resolveApiEndpoint(env).apiUrl;
+}
+
+/** The three classes of endpoint the server distinguishes on its own surface. */
+export type ApiEnvironmentClass = "production" | "sandbox" | "other";
+
+/**
+ * Classify a base URL as production, sandbox, or something else.
+ *
+ * The comparison goes through `normaliseHostname`, which is not decoration:
+ * `https://api.tastyworks.com.` — the fully-qualified spelling every DNS tool
+ * prints, and therefore one an operator pastes — is production to a resolver,
+ * and an exact string match returned false for it. Every predicate that decides
+ * whether real money is involved reads the host through this one function, so
+ * they cannot disagree about the same string.
+ *
+ * An unparseable value falls back to a substring probe, so a malformed but
+ * production-looking URL still classifies as production. The sandbox host does
+ * not contain that substring, so the fallback cannot mislabel a sandbox.
+ */
+export function apiEnvironmentOf(
+  apiUrl: string | undefined,
+): ApiEnvironmentClass {
+  if (!apiUrl) return "other";
+  let hostname: string;
+  try {
+    hostname = new URL(apiUrl).hostname;
+  } catch {
+    return apiUrl.toLowerCase().includes("api.tastyworks.com")
+      ? "production"
+      : "other";
+  }
+  const host = normaliseHostname(hostname);
+  if (host === "api.tastyworks.com") return "production";
+  if (
+    host === "api.cert.tastyworks.com" ||
+    host === "api.sandbox.tastytrade.com"
+  )
+    return "sandbox";
+  return "other";
+}
 
 /**
  * Env var an operator sets to acknowledge, by name, an API host this server
@@ -656,7 +789,11 @@ export function inspectCredentialTarget(
       ...base,
       refusal:
         "No API base URL is configured, so there is no endpoint to authenticate against.",
-      notes: [`Set TASTYTRADE_API_URL, or unset it to use ${SANDBOX_API_URL}.`],
+      notes: [
+        `Set ${API_URL_ENV_VAR} to an explicit endpoint, or ${API_ENV_VAR}=sandbox ` +
+          `for ${SANDBOX_API_URL}. With neither set, the endpoint is ` +
+          `${PRODUCTION_API_URL}.`,
+      ],
     };
   }
 

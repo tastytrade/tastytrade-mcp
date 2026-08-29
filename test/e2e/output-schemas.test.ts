@@ -1081,6 +1081,8 @@ const EFFECT_DOMAIN = ["Credit", "Debit", "None", null];
  * plainly a tastytrade product list that grows with the product.
  */
 const CLOSED_VALUE_DOMAINS: Record<string, string> = {
+  environment:
+    "production | sandbox | other, and the only entry here that tastytrade does not author at all: the value is written by this server from the resolved endpoint (apiEnvironmentOf), so the domain is closed by our own code rather than by a broker taxonomy that could widen",
   action:
     "the six order-leg actions, closed by open/close semantics the dispatcher already enforces on input (validateLegActions); orders.md:337",
   "exercise-style":
@@ -2057,14 +2059,18 @@ describe("the dry-run schemas require only what this server appends", () => {
     // broker in it, and it is worth asserting, because `sanity_warnings` being unwritten
     // on this route is exactly what lets an upstream supply it.
     expect(rootRequired(tool).sort()).toEqual(
-      ["checks_not_run", "confirmation_token", "sanity_warnings"].filter((f) =>
-        rootRequired(tool).includes(f),
-      ),
+      [
+        "checks_not_run",
+        "confirmation_token",
+        "environment",
+        "sanity_warnings",
+      ].filter((f) => rootRequired(tool).includes(f)),
     );
     for (const field of rootRequired(tool)) {
       expect([
         "checks_not_run",
         "confirmation_token",
+        "environment",
         "sanity_warnings",
       ]).toContain(field);
     }
@@ -2142,6 +2148,11 @@ describe("every destructive schema that promises a broker field is a tracked exc
     // emitted on every one of the five destructive submit routes.
     "checks_not_run",
     "confirmation_token",
+    // Which environment the call hit. Authored from the resolved endpoint, on
+    // every order route, and never read from upstream — see
+    // test/e2e/order-result-namespace.test.ts, which plants one and proves it
+    // stays quarantined under `upstream`.
+    "environment",
   ]);
 
   /** Every destructive tool, straight off the annotation registry. */

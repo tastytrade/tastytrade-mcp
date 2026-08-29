@@ -51,8 +51,16 @@ Four coordinated edits, or it will not load:
 4. the `case` in `handleToolCall()`
 
 Presentation metadata (title, description, `outputSchema`) goes in
-`src/mcp-server/tool-metadata.ts`. A destructive tool additionally needs a
-matching `dry_run_*` variant that issues the confirmation token.
+`src/mcp-server/tool-metadata.ts`.
+
+A destructive tool that moves money needs a matching `dry_run_*` variant that
+mints the confirmation token, and a submit route that consumes it before
+anything reaches the broker. Five routes work that way: `place_order`,
+`edit_order`, `replace_order`, `place_complex_order`, `edit_complex_order`. The
+rest of the destructive surface carries no token — the two order cancels, and
+the watchlist and quote-alert mutations, which move no money. Decide which of
+the two a new destructive tool is deliberately, and say so in its own
+description: that description is the only place a caller can read it.
 
 ## Conventions
 
@@ -65,6 +73,13 @@ matching `dry_run_*` variant that issues the confirmation token.
 - **An `outputSchema` constraint is a rejection rule handed to the client**,
   applied to data the broker authors. Prefer `type: "string"` with the known
   values in the description over an `enum` the API could outgrow.
+- **A new member on a result is the same rule pointing the other way.** The
+  order routes close their own wrapper with `additionalProperties: false`, so a
+  field the server starts returning and does not declare makes a validating
+  client discard the entire result — a call that reached the broker and
+  succeeded, reported as a failure. Declare it, and put it in `required` when
+  the route always sends it. `environment` on the order routes is the worked
+  example.
 - A test fixture that stands in for a credential must satisfy the redaction
   length floor **without** the entropy — see `.gitleaks.toml`.
 

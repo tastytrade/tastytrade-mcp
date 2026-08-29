@@ -87,11 +87,11 @@ ok "build succeeded"
 # ---- 6. test -------------------------------------------------------------
 stage "Test battery + coverage (jest)"
 npm run --silent test:coverage || fail "tests failed or coverage below threshold"
-# Jest enforces the floors; nothing enforced the policy ABOVE the floors. The
-# config says its thresholds "sit a couple of points under what is currently
-# achieved" and ratchet up, and that had quietly lapsed — one floor sat 22.5
-# points under real coverage, so a fifth of that file's branch coverage could
-# have been lost with this stage still green. This reads the summary the run
+# Jest enforces the floors; on its own, nothing enforces the policy ABOVE them.
+# The config says its thresholds "sit a couple of points under what is currently
+# achieved" and ratchet up, and a floor left far under real coverage lets a large
+# share of that file's branch coverage be lost with this stage still green. This
+# reads the summary the run
 # just wrote, which is why it lives here rather than in a test: inside the run
 # the file is the PREVIOUS run's, and on a fresh clone there is no file at all.
 node scripts/check-coverage-floors.mjs ||
