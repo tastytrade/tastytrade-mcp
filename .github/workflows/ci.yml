@@ -35,7 +35,24 @@ concurrency:
 jobs:
   gate:
     name: Quality gate (./build.sh)
-    runs-on: ubuntu-latest
+    # Trusted code runs on the self-hosted pool; untrusted code never does.
+    #
+    # A pull request whose head repository is THIS repository can only have been
+    # created by someone with push access — an org owner, a repository admin, or
+    # an invited collaborator. A fork pull request can be opened by anyone, so its
+    # code runs on GitHub-hosted runners, where a hostile workflow spends nothing
+    # of ours and reaches nothing of ours. `push` events are our own code by
+    # definition.
+    #
+    # The label lives in the TRUSTED_RUNNER repository variable rather than here,
+    # so the pool can be resized, renamed or retired without editing this file —
+    # and so this workflow behaves correctly while the variable is unset: every
+    # branch of the expression then evaluates to the GitHub-hosted runner.
+    runs-on: >-
+      ${{ (github.event_name != 'pull_request'
+           || github.event.pull_request.head.repo.full_name == github.repository)
+          && (vars.TRUSTED_RUNNER || 'ubuntu-latest')
+          || 'ubuntu-latest' }}
     timeout-minutes: 20
     steps:
       # `persist-credentials: false` keeps the GITHUB_TOKEN out of
@@ -130,7 +147,24 @@ jobs:
 
   docker:
     name: Docker image (linux/amd64 + linux/arm64)
-    runs-on: ubuntu-latest
+    # Trusted code runs on the self-hosted pool; untrusted code never does.
+    #
+    # A pull request whose head repository is THIS repository can only have been
+    # created by someone with push access — an org owner, a repository admin, or
+    # an invited collaborator. A fork pull request can be opened by anyone, so its
+    # code runs on GitHub-hosted runners, where a hostile workflow spends nothing
+    # of ours and reaches nothing of ours. `push` events are our own code by
+    # definition.
+    #
+    # The label lives in the TRUSTED_RUNNER repository variable rather than here,
+    # so the pool can be resized, renamed or retired without editing this file —
+    # and so this workflow behaves correctly while the variable is unset: every
+    # branch of the expression then evaluates to the GitHub-hosted runner.
+    runs-on: >-
+      ${{ (github.event_name != 'pull_request'
+           || github.event.pull_request.head.repo.full_name == github.repository)
+          && (vars.TRUSTED_RUNNER || 'ubuntu-latest')
+          || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -160,3 +194,11 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: false
+          # Without these, every run rebuilds both architectures from scratch,
+          # and the linux/arm64 half runs under QEMU emulation. That is the
+          # difference between a two-minute job and a seventeen-minute one, on
+          # the same commit. The GitHub Actions cache backend is scoped per
+          # branch with fallback to the default branch, so a pull request reuses
+          # main's layers and only rebuilds what it changed.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

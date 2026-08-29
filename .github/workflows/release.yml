@@ -67,7 +67,10 @@ jobs:
     # it, so a rename has to update it here by hand, together with the slug in
     # package.json and the image reference in server.json.
     if: github.repository == 'tastytrade/tastytrade-mcp'
-    runs-on: ubuntu-latest
+    # A tag push is our own code by definition, so the gate may use the
+    # self-hosted pool. Falls back to the GitHub-hosted runner while the
+    # TRUSTED_RUNNER repository variable is unset.
+    runs-on: ${{ vars.TRUSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -142,6 +145,15 @@ jobs:
   publish:
     name: Publish image to GHCR
     needs: gate
+    # DELIBERATELY GitHub-hosted, unlike every other job here.
+    #
+    # This is the only job that holds `packages: write`, and the only one whose
+    # output is the artifact an operator's `docker pull` resolves. A runner that
+    # builds it can substitute what it publishes. Releases are infrequent, so the
+    # minutes saved by moving this to a third-party pool are the cheapest minutes
+    # in the repository, and the integrity given up is the most expensive.
+    #
+    # Do not fold this into TRUSTED_RUNNER without deciding that trade separately.
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -451,6 +463,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.version.outputs.image }}
+          # Read the layers ci.yml warmed on the same commit, but do not write:
+          # a release must not seed a cache that later builds trust, and a cache
+          # entry is the one build input `provenance: mode=max` cannot attest.
+          cache-from: type=gha
           # BuildKit provenance (SLSA in-toto) plus an SBOM, attached to the
           # image in the registry. `mode=max` records the full build inputs,
           # which is the part that makes the attestation useful for answering
