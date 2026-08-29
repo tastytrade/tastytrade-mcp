@@ -2417,3 +2417,116 @@ describe("`additionalProperties: false` is set only on a wrapper we build", () =
     }
   });
 });
+
+// ===========================================================================
+// Description claims measured against the recorded payloads
+//
+// Each of these was prose asserting something the sandbox does not do. They are
+// checked against the fixtures rather than by inspection, so the claim and the
+// evidence move together.
+// ===========================================================================
+
+describe("descriptions do not promise a wire type the payload contradicts", () => {
+  /** Fields the futures tools describe as arriving as JSON numbers. */
+  const NUMERIC_CLAIM_FIELDS = [
+    "notional-multiplier",
+    "tick-size",
+    "display-factor",
+  ];
+
+  it("the sandbox sends these as strings", () => {
+    // The premise, established before any prose is asserted: if the sandbox ever
+    // starts sending numbers, this fails and the descriptions should change back.
+    for (const fixture of [
+      "tastytrade_get_future_products",
+      "tastytrade_get_futures",
+    ]) {
+      const payload = loadFixture(fixture) as {
+        items: Array<Record<string, unknown>>;
+      };
+      for (const f of NUMERIC_CLAIM_FIELDS) {
+        if (f in payload.items[0]) {
+          expect(typeof payload.items[0][f]).toBe("string");
+        }
+      }
+    }
+  });
+
+  it("no tool anywhere calls them JSON numbers", () => {
+    // Every tool, not just the one the report named: the same sentence was
+    // copied across four futures tools, and a test covering one of them passed
+    // while three still carried the claim.
+    const offenders = Object.entries(TOOL_METADATA)
+      .filter(([, meta]) =>
+        /JSON numbers \(doubles\)/.test((meta.description as string) ?? ""),
+      )
+      .map(([name]) => name);
+    expect(offenders).toEqual([]);
+  });
+
+  it("does not document contract-limit, which the payload omits", () => {
+    const payload = loadFixture("tastytrade_get_future_products") as {
+      items: Array<Record<string, unknown>>;
+    };
+    expect("contract-limit" in payload.items[0]).toBe(false);
+    const description = TOOL_METADATA["tastytrade_get_future_products"]
+      .description as string;
+    // Not silence — a reader looking for the upstream-documented field is better
+    // served by being told it does not arrive. What is forbidden is listing it
+    // among the fields the tool returns.
+    expect(description).not.toMatch(/contract-limit, cash-settled/);
+    expect(description).not.toMatch(/tick-size, contract-limit/);
+    if (description.includes("contract-limit")) {
+      expect(description).toMatch(
+        /contract-limit[^.]{0,120}(?:does not carry|not carried|absent)/,
+      );
+    }
+  });
+});
+
+describe("descriptions state which chain tools guarantee strike order", () => {
+  /** Every strike group of two or more, from one recorded chain. */
+  function strikeGroups(fixture: unknown): number[][] {
+    const out: number[][] = [];
+    const walk = (node: unknown): void => {
+      if (Array.isArray(node)) return node.forEach(walk);
+      if (node === null || typeof node !== "object") return;
+      const rec = node as Record<string, unknown>;
+      if (Array.isArray(rec.strikes)) {
+        const s = (rec.strikes as Array<Record<string, unknown>>)
+          .map((x) => Number(x["strike-price"]))
+          .filter((n) => Number.isFinite(n));
+        if (s.length >= 2) out.push(s);
+      }
+      Object.values(rec).forEach(walk);
+    };
+    walk(fixture);
+    return out;
+  }
+
+  const isSorted = (s: number[]) => s.every((v, i) => i === 0 || s[i - 1] <= v);
+
+  it("the futures chain arrives unsorted, and says so", () => {
+    const groups = strikeGroups(
+      loadFixture("tastytrade_get_futures_option_chains"),
+    );
+    expect(groups.length).toBeGreaterThan(0);
+    // The premise: at least one group is out of order. Without this the prose
+    // assertion below would pass on a payload that never disagreed.
+    expect(groups.some((g) => !isSorted(g))).toBe(true);
+
+    const description = TOOL_METADATA["tastytrade_get_futures_option_chains"]
+      .description as string;
+    expect(description).toMatch(
+      /not (?:sorted|ordered)|no (?:guaranteed )?order|unsorted/i,
+    );
+  });
+
+  it("the equity nested chain arrives sorted", () => {
+    const groups = strikeGroups(
+      loadFixture("tastytrade_get_option_chain_nested"),
+    );
+    expect(groups.length).toBeGreaterThan(0);
+    expect(groups.every(isSorted)).toBe(true);
+  });
+});
