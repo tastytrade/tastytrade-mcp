@@ -42,13 +42,14 @@ export default {
   clearMocks: true,
   // Coverage is measured across ALL of src/, not just the safety modules.
   //
-  // Collecting only src/safety/** plus annotations.ts would be 672 of 16,828
-  // source lines, about 4% of the codebase, leaving the dispatcher, the HTTP
-  // client and the OAuth client with no floor at all — and the end-to-end suite
-  // that covers them found two fail-open safety bugs, a tool that could never
-  // succeed, and a rate-limit bucket that could never bind. Measuring only the
-  // parts already known to be well covered is how
-  // that happened.
+  // Collecting only src/safety/** plus annotations.ts would collect eight of
+  // the twenty-four files under src/, leaving the dispatcher, the HTTP client
+  // and the OAuth client with no floor at all — and the safety layer is not the
+  // whole of the money-moving path. A tool call reaches it through the
+  // dispatcher and leaves through the HTTP client, so a figure that measures
+  // only the modules already known to be well covered describes a fraction of
+  // what an order passes through. Every file under src/ is collected, so the
+  // global floor below is a claim about the whole server.
   collectCoverageFrom: ["src/**/*.ts"],
 
   // The default reporters, plus `json-summary`.
@@ -69,14 +70,12 @@ export default {
   // Every group is annotated with what it currently achieves, in the header's
   // order — statements / branches / functions / lines. Those figures are a
   // claim about the present, and they are checked against the run that just
-  // measured them:
-  // scripts/check-coverage-floors.mjs fails the gate if an annotation has
-  // drifted, or if a floor has fallen far enough below measured coverage to
-  // stop being a ratchet. Both had happened here, quietly, because nothing read
-  // these comments. The worst of it was this file's own showcase: api-client's
-  // branch floor of 44 against real coverage of 66.5, on the one file
-  // CONTRIBUTING.md singles out as never to be lowered — a fifth of its branch
-  // coverage could have been lost with the gate still green.
+  // measured them: scripts/check-coverage-floors.mjs fails the gate if an
+  // annotation has drifted, or if a floor has fallen far enough below measured
+  // coverage to stop being a ratchet. So an annotation that has drifted, and a
+  // floor sitting far above what was measured, do not survive a green build. A
+  // floor lowered in step with a real drop still passes here — that one is a
+  // review responsibility, and CONTRIBUTING.md says so.
   coverageThreshold: {
     // Whole tree. Achieved: 98.3 stmts / 94.3 branch / 97.6 func / 98.7 lines.
     global: { statements: 93, branches: 89, functions: 93, lines: 94 },
@@ -117,9 +116,9 @@ export default {
     },
 
     // The HTTP client's floor is high because two things removed most of its
-    // uncovered mass at once: twelve near-duplicate query serializers nobody had
-    // a test for were consolidated into one, and path construction went from a
-    // two-branch helper to one constructor with a case per refusal.
+    // uncovered mass at once: twelve near-duplicate query serializers were
+    // consolidated into one, and path construction went from a two-branch
+    // helper to one constructor with a case per refusal.
     // Achieved: 97.8 / 86.4 / 98.6 / 98.1, and ratcheted to
     // a couple of points under. Never lower these to accommodate a drop.
     "./src/api-client.ts": {

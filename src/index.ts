@@ -68,10 +68,11 @@ export function isEntryModule(
 }
 
 if (isEntryModule(import.meta.url, process.argv[1])) {
-  // `void`, with the failure path handling its own exit: a startup failure used
-  // to be swallowed by `.catch(console.error)`, which left the process exiting
-  // 0 — the code most supervisors and CI runners read as a clean shutdown, so a
-  // server that never started looked like one that had finished its work.
+  // `void`, with the failure path handling its own exit. A bare
+  // `.catch(console.error)` would swallow a startup failure and leave the process
+  // exiting 0 — the code most supervisors and CI runners read as a clean
+  // shutdown, so a server that never started would look like one that had
+  // finished its work.
   void (async () => {
     try {
       const server = new TastytradeMCPServer();

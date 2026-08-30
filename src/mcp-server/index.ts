@@ -96,14 +96,21 @@ import {
 // importer of the dispatcher keeps working.
 import {
   ALLOW_UNKNOWN_API_HOST_ENV_VAR,
+  API_ENV_VAR,
+  API_URL_ENV_VAR,
   KNOWN_API_HOSTS,
   PRODUCTION_API_URL,
   SANDBOX_API_URL,
   apiEndpointForDisplay,
+  apiEnvironmentOf,
   assertCredentialTargetAllowed,
   clipUrlForMessage,
   inspectCredentialTarget,
   normaliseHostname,
+  resolveApiEndpoint,
+  resolveApiUrl,
+  type ApiEndpointResolution,
+  type ApiEnvironmentClass,
   type CredentialTargetDecision,
 } from "../credential-target.js";
 
@@ -747,6 +754,17 @@ function orderRouteResult(fields: {
    * declared meaning is "what the broker said".
    */
   upstream_notes?: string[];
+  /**
+   * Which environment this call actually hit.
+   *
+   * Authored by this server, never by the broker. The default endpoint is
+   * PRODUCTION, and the startup banner announcing that goes to stderr — a log
+   * file whoever reads a transcript never opens. So every order route states it
+   * in-band: a transcript is then evidence of which environment filled the
+   * order, and an agent can tell the user which one it is before acting instead
+   * of inferring it.
+   */
+  environment: ApiEnvironmentClass;
 }): any {
   // orderRouteResult authors no content of its own — it decides which namespace
   // the broker's payload lands in and hands the object to the one envelope
@@ -760,6 +778,7 @@ function orderRouteResult(fields: {
       ? {}
       : { upstream_notes: fields.upstream_notes }),
     checks_not_run: fields.checks_not_run,
+    environment: fields.environment,
   });
 }
 
@@ -1442,21 +1461,28 @@ function buildDryRunReplaceEditToolDefs(): Tool[] {
  * the field must appear on both sides or every place/replace/edit fails with a
  * spurious binding mismatch.
  *
- * The version suffix is this stamp's own, not the package version: bump it when the
- * server's order-building behaviour changes materially.
+ * The version suffix is the package version, so the stamp moves with a release
+ * rather than needing its own bump. Two sides read it — this server writes it and
+ * tastytrade's order flow reports it back on every order read — so the value is
+ * held as a literal in test/mcp-server/order-translation.test.ts, which makes
+ * changing it a deliberate two-sided edit.
  *
- * OPEN QUESTION: `automated-source` is NOT set, and that is not yet a decision.
- * orders.md says "Set `automated-source: true` for algorithmically-generated
- * orders. This may affect order handling and REGULATORY REPORTING." Every order
- * here originates from an agent calling a tool, so the flag is applicable on its
- * face, and its absence means those orders are reported as if a human typed them.
+ * `automated-source: true` travels with it on the same four builders. orders.md:
+ * "Set `automated-source: true` for algorithmically-generated orders. This may
+ * affect order handling and REGULATORY REPORTING." Every order this server builds
+ * originates from an agent calling a tool — there is no path through it that a
+ * human types — so the flag is true for all of them, unconditionally, and setting
+ * it is what makes the report match what happened.
  *
- * It is deliberately still absent: asserting a flag the broker ties to regulatory
- * reporting is a compliance decision, not an engineering one. If the answer is yes,
- * add `"automated-source": true` beside `source: MCP_ORDER_SOURCE` in the four
- * shared builders — the same four, for the same reason as above — leave
- * buildComplexEditBody unstamped, document it, and pin it in the
- * order-translation tests exactly as `source` is pinned.
+ * Both are server-side and non-overridable, and for the same reason: an
+ * attribution a caller can forge is not an attribution, and a regulatory
+ * attribute a caller can switch off is not an attribute. Neither `source` nor
+ * `automated_source` is an input property on any tool.
+ *
+ * buildComplexEditBody stays unstamped, deliberately. orders.md enumerates that
+ * request body as exactly `ratio-price-comparator` + `ratio-price-threshold`, so
+ * an extra field there is unverified against the spec, and an unattributed
+ * threshold edit beats a rejected one. It creates no order and changes no leg.
  */
 export const MCP_ORDER_SOURCE = `tastytrade-mcp/${PACKAGE_VERSION}`;
 
@@ -1470,6 +1496,7 @@ function buildReplaceBody(args: any): Record<string, unknown> {
     "order-type": args.order_type,
     "time-in-force": args.time_in_force,
     source: MCP_ORDER_SOURCE,
+    "automated-source": true,
   };
   if (args.price !== undefined) {
     body.price = args.price;
@@ -1492,7 +1519,10 @@ function buildEditBody(args: any): Record<string, unknown> {
   // PATCH /orders/{id} takes a partial of the order request body, which
   // includes `source`, so MCP-originated edits are attributed too. Its
   // complex-order counterpart is not — see MCP_ORDER_SOURCE.
-  const body: Record<string, unknown> = { source: MCP_ORDER_SOURCE };
+  const body: Record<string, unknown> = {
+    source: MCP_ORDER_SOURCE,
+    "automated-source": true,
+  };
   // The /orders/{id}/dry-run endpoint re-validates the whole order, so it
   // requires order-type + time-in-force even for a price-only edit.
   if (args.order_type !== undefined) body["order-type"] = args.order_type;
@@ -1716,6 +1746,7 @@ export function buildComplexOrderBody(args: any): Record<string, unknown> {
   const body: Record<string, unknown> = { type: args.type };
   // Server-controlled attribution; overrides anything the client sent.
   body.source = MCP_ORDER_SOURCE;
+  body["automated-source"] = true;
   if (args.trigger_order !== undefined) {
     body["trigger-order"] = buildComponentOrderBody(args.trigger_order);
   }
@@ -2632,6 +2663,7 @@ export function buildOrderBody(args: any): OutboundOrderBody {
     "time-in-force": args.time_in_force,
     "order-type": args.order_type,
     source: MCP_ORDER_SOURCE,
+    "automated-source": true,
     ...(args.price && { price: args.price, "price-effect": args.price_effect }),
     ...(args.stop_trigger && { "stop-trigger": args.stop_trigger }),
     legs: (args.legs ?? []).map((leg: any) => ({
@@ -2737,32 +2769,26 @@ export function decorateTool(tool: Tool): Tool {
 // imports.
 export {
   ALLOW_UNKNOWN_API_HOST_ENV_VAR,
+  API_ENV_VAR,
+  API_URL_ENV_VAR,
   KNOWN_API_HOSTS,
   PRODUCTION_API_URL,
   SANDBOX_API_URL,
   apiEndpointForDisplay,
+  apiEnvironmentOf,
   assertCredentialTargetAllowed,
   clipUrlForMessage,
   inspectCredentialTarget,
   normaliseHostname,
+  resolveApiEndpoint,
+  resolveApiUrl,
+  type ApiEndpointResolution,
+  type ApiEnvironmentClass,
   type CredentialTargetDecision,
 };
 
 /** Env var that switches the server into read-only mode. */
 export const READ_ONLY_ENV_VAR = "TASTYTRADE_READ_ONLY";
-
-/**
- * Resolve the API base URL.
- *
- * The fallback is deliberately the SANDBOX. An operator who has not made a
- * conscious choice must not end up pointed at production, because the
- * difference between the two is whether an order spends real money. Reaching
- * production requires explicitly setting TASTYTRADE_API_URL.
- */
-export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const configured = env.TASTYTRADE_API_URL?.trim();
-  return configured ? configured : SANDBOX_API_URL;
-}
 
 /**
  * True when the given base URL points at the live production API.
@@ -2778,15 +2804,7 @@ export function resolveApiUrl(env: NodeJS.ProcessEnv = process.env): string {
  * the same function, so they cannot disagree about it again.
  */
 export function isProductionApiUrl(apiUrl: string | undefined): boolean {
-  if (!apiUrl) return false;
-  try {
-    return normaliseHostname(new URL(apiUrl).hostname) === "api.tastyworks.com";
-  } catch {
-    // Not a parseable URL. Fall back to a substring probe so a malformed but
-    // production-looking value still trips the warning. Note the sandbox host
-    // (api.cert.tastyworks.com) does not contain this substring.
-    return apiUrl.toLowerCase().includes("api.tastyworks.com");
-  }
+  return apiEnvironmentOf(apiUrl) === "production";
 }
 
 /** Values that enable read-only mode, after trim + lowercase. */
@@ -2859,6 +2877,87 @@ export function startupBanner(
 }
 
 /**
+ * The `instructions` string handed to the client in the initialize result.
+ *
+ * Deliberately short. This lands in the model's context for the whole session,
+ * and a paragraph nobody finishes protects nobody. It says which environment is
+ * live, what that means for money, and — for the sandbox — the one thing that
+ * does not work there.
+ *
+ * This is the ONLY environment signal an agent can read. The startup banner is
+ * stderr, which is a log file; `instructions` is protocol, which is context.
+ */
+export function serverInstructions(
+  apiUrl: string | undefined,
+  readOnlyMode = false,
+): string {
+  const endpoint = clipUrlForMessage(apiUrl);
+  const readOnly = readOnlyMode
+    ? " Read-only mode is ON: every write and destructive tool is withheld."
+    : "";
+  switch (apiEnvironmentOf(apiUrl)) {
+    case "production":
+      return (
+        `PRODUCTION (${endpoint}). This is production: real money, real account ` +
+        `control. Orders placed, edited, replaced or cancelled through this ` +
+        `server affect real funds and cannot be undone. Handle with care and ` +
+        `caution, and say which environment you are in before any order action.` +
+        readOnly
+      );
+    case "sandbox":
+      return (
+        `SANDBOX (${endpoint}). No real money. The sandbox does not serve market ` +
+        `data, so the quote and market-metrics tools fail there; everything else ` +
+        `works.` +
+        readOnly
+      );
+    default:
+      return (
+        `UNRECOGNISED ENDPOINT (${endpoint}). This server cannot tell whether it ` +
+        `holds real funds, so treat it as production: real money may be at risk.` +
+        readOnly
+      );
+  }
+}
+
+/**
+ * Emit a stderr banner when TASTYTRADE_ENV was set to something unreadable.
+ * Returns whether the warning fired (for tests).
+ *
+ * The resolution has already fallen back to the SANDBOX. An operator who wrote
+ * something meant to select an environment and misspelled it must not have that
+ * read as permission to trade real money — the same rule
+ * {@link isReadOnlyModeEnabled} follows, for the same reason. Unset is a
+ * default; a typo is a failed instruction, and the two must not land in the
+ * same place.
+ */
+export function warnIfUnrecognisedApiEnv(
+  resolution: ApiEndpointResolution,
+): boolean {
+  const raw = resolution.unrecognisedEnvValue;
+  if (raw === undefined) return false;
+  console.error(
+    [
+      "",
+      "**************************************************************",
+      "*  WARNING: UNRECOGNISED ENVIRONMENT — FAILING CLOSED        *",
+      "**************************************************************",
+      `  ${API_ENV_VAR}=${JSON.stringify(clipUrlForMessage(raw))} is not a value`,
+      "  this server understands.",
+      "  Recognised: production (or prod/live), sandbox (or cert/staging/sbx).",
+      "",
+      "  The SANDBOX is therefore in use, not production. A value that is set",
+      "  but unreadable must never be taken as permission to trade live funds.",
+      `  For production, set ${API_ENV_VAR}=production or unset it — production`,
+      "  is the default.",
+      "**************************************************************",
+      "",
+    ].join("\n"),
+  );
+  return true;
+}
+
+/**
  * Emit a single prominent stderr banner when the server is pointed at
  * production. Returns whether the warning fired (for tests).
  *
@@ -2883,8 +2982,9 @@ export function warnIfProductionApi(apiUrl: string | undefined): boolean {
       "  places, edits, replaces or cancels affect real funds in real",
       "  brokerage accounts, and they cannot be undone.",
       "",
-      `  For the sandbox instead: unset TASTYTRADE_API_URL (the default is`,
-      `  ${SANDBOX_API_URL}).`,
+      `  This is the DEFAULT endpoint. For the sandbox instead, set`,
+      `  ${API_ENV_VAR}=sandbox (the sandbox does not serve market data,`,
+      `  so quotes and market metrics do not work there).`,
       `  To disable every write and destructive tool: ${READ_ONLY_ENV_VAR}=1`,
       "  Risks and the limits of the safety layer: see the README.",
       "**************************************************************",
@@ -3068,6 +3168,8 @@ export class TastytradeMCPServer {
    * be toggled mid-session by mutating the environment.
    */
   private readonly readOnlyMode: boolean;
+  /** Production, sandbox or something else. Set once, from the resolved endpoint. */
+  private readonly apiEnvironment: ApiEnvironmentClass;
   /**
    * The configured endpoint, already reduced to scheme + host by
    * `apiEndpointForDisplay` — so what is retained can never include userinfo, a
@@ -3095,6 +3197,29 @@ export class TastytradeMCPServer {
     clientOptions?: TastytradeClientOptions,
   ) {
     this.readOnlyMode = isReadOnlyModeEnabled();
+
+    // Initialize client with config or environment variables. Credentials come
+    // from the environment only — there is no tool that can set them at
+    // runtime, and no interactive browser flow.
+    //
+    // Resolved BEFORE the Server is constructed because `instructions` is part of
+    // the initialize result, and the environment is the first thing the client
+    // has to be told.
+    const envEndpoint = resolveApiEndpoint();
+    const resolvedConfig: TastytradeConfig = config || {
+      apiUrl: envEndpoint.apiUrl,
+      clientId: process.env.TASTYTRADE_CLIENT_ID,
+      clientSecret: process.env.TASTYTRADE_CLIENT_SECRET,
+      refreshToken: process.env.TASTYTRADE_REFRESH_TOKEN,
+    };
+
+    // Before anything else is decided: if the operator named an environment we
+    // could not read, say so loudly. The resolution has already fallen back to
+    // the sandbox.
+    if (!config) warnIfUnrecognisedApiEnv(envEndpoint);
+
+    this.apiEnvironment = apiEnvironmentOf(resolvedConfig.apiUrl);
+
     this.server = new Server(
       {
         name: "tastytrade-mcp-server",
@@ -3106,18 +3231,16 @@ export class TastytradeMCPServer {
           resources: {},
           prompts: {},
         },
+        // In-band, and therefore the only environment signal an agent can
+        // actually read. The stderr banner below says the same thing to whoever
+        // is tailing the server log; this says it to the model that is about to
+        // decide whether to place an order.
+        instructions: serverInstructions(
+          resolvedConfig.apiUrl,
+          this.readOnlyMode,
+        ),
       },
     );
-
-    // Initialize client with config or environment variables. Credentials come
-    // from the environment only — there is no tool that can set them at
-    // runtime, and no interactive browser flow.
-    const resolvedConfig: TastytradeConfig = config || {
-      apiUrl: resolveApiUrl(),
-      clientId: process.env.TASTYTRADE_CLIENT_ID,
-      clientSecret: process.env.TASTYTRADE_CLIENT_SECRET,
-      refreshToken: process.env.TASTYTRADE_REFRESH_TOKEN,
-    };
 
     // BEFORE the client exists: an endpoint this server cannot vouch for is one
     // it never authenticates against. Throws on a refusal, so no object capable
@@ -5016,6 +5139,7 @@ export class TastytradeMCPServer {
         );
         if (!sent.sent) return sent.refusal;
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: sent.value,
           // The token was spent by consumeToken above, so `null` is the honest
           // answer — and authoring it is what stops an upstream supplying one.
@@ -5069,6 +5193,7 @@ export class TastytradeMCPServer {
           confirmation_token = issued.token;
         }
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: dryRunResult,
           confirmation_token,
           // A pre-flight reaches no local finding of its own, and now says so
@@ -5131,6 +5256,7 @@ export class TastytradeMCPServer {
           confirmation_token = issued.token;
         }
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: dryRun,
           confirmation_token,
           // A pre-flight reaches no local finding of its own, and now says so
@@ -5165,6 +5291,7 @@ export class TastytradeMCPServer {
           confirmation_token = issued.token;
         }
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: dryRun,
           confirmation_token,
           // A pre-flight reaches no local finding of its own, and now says so
@@ -5213,6 +5340,7 @@ export class TastytradeMCPServer {
         );
         if (!sent.sent) return sent.refusal;
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: sent.value,
           // The token was spent by consumeToken above, so `null` is the honest
           // answer — and authoring it is what stops an upstream supplying one.
@@ -5264,6 +5392,7 @@ export class TastytradeMCPServer {
         );
         if (!sent.sent) return sent.refusal;
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: sent.value,
           // The token was spent by consumeToken above, so `null` is the honest
           // answer — and authoring it is what stops an upstream supplying one.
@@ -5343,6 +5472,7 @@ export class TastytradeMCPServer {
           confirmation_token = issued.token;
         }
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: dryRun,
           confirmation_token,
           // A pre-flight reaches no local finding of its own, and now says so
@@ -5388,6 +5518,7 @@ export class TastytradeMCPServer {
         );
         if (!sent.sent) return sent.refusal;
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: sent.value,
           // The token was spent by consumeToken above, so `null` is the honest
           // answer — and authoring it is what stops an upstream supplying one.
@@ -5439,6 +5570,7 @@ export class TastytradeMCPServer {
           confirmation_token = issued.token;
         }
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: dryRun,
           confirmation_token,
           // A pre-flight reaches no local finding of its own, and now says so
@@ -5480,6 +5612,7 @@ export class TastytradeMCPServer {
         );
         if (!sent.sent) return sent.refusal;
         return orderRouteResult({
+          environment: this.apiEnvironment,
           upstream: sent.value,
           // The token was spent by consumeToken above, so `null` is the honest
           // answer — and authoring it is what stops an upstream supplying one.

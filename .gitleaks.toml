@@ -3,8 +3,17 @@
 # The tree is expected to scan clean, so that a result of "0 leaks" carries
 # meaning rather than being permanently noisy.
 #
-#   gitleaks detect --config .gitleaks.toml --no-banner --redact
-#   gitleaks dir .  --config .gitleaks.toml --no-banner --redact
+# The gate's scan is stage 8 of ./build.sh, which is also how to reproduce it:
+# it copies the working-tree content of every file `git ls-files` reports into a
+# temp directory and scans that, so what is scanned is exactly what ships. A
+# bare `gitleaks dir .` is a different scan — a filesystem walk has no notion of
+# .gitignore, and no flag to give it one, so it also reads untracked local files
+# that form no part of the repository. To scan the history instead:
+#
+#   gitleaks git --config .gitleaks.toml --no-banner --redact
+#
+# (`git`, `dir` and `stdin` are the scanning subcommands of the version CI pins,
+# 8.30.1; `detect` is not one of them.)
 #
 # ## Writing test fixtures that look like credentials
 #
@@ -19,8 +28,8 @@
 # `cs_live_NOT_A_REAL_CLIENT_SECRET_FIXTURE_0000`, not a random hex string. It
 # exercises exactly the same code path, it is self-documenting to a reader, and
 # it does not trip the scanner — so this allowlist does not have to grow every
-# time a test is added. Random-looking fixtures were converted to this
-# convention rather than allowlisted one by one.
+# time a test is added. A new fixture follows this convention rather than
+# growing the allowlist by one more entry.
 #
 # The single entry below matches an exact literal rather than a file path. That
 # distinction matters: allowlisting a path would hide a real credential

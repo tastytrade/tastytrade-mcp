@@ -1,5 +1,9 @@
 /**
- * End-to-end cover for two fail-open defects in the safety layer.
+ * End-to-end cover for two fail-CLOSED guarantees in the safety layer.
+ *
+ * Both say the same thing about a fact this server cannot establish: it refuses or
+ * withholds rather than proceeding, and it never presents "we could not tell" as
+ * "we looked and it was fine".
  *
  * The unit tests in test/safety/ call `redactSecrets`, `redactDeep` and
  * `runSanityChecks` directly. This suite drives the same two guarantees through the
@@ -92,10 +96,14 @@ describe("the envelope scrubs a credential under any key spelling", () => {
   const SECRET = "tt_NOT_A_REAL_CREDENTIAL_FIXTURE_9f3c1d7b5a24";
 
   /**
-   * The spellings a gateway actually produces. The first four are the ones that
-   * reached the envelope intact under the old fully-anchored key list — the rest
-   * are the case, separator and camelCase variants that the same list would have
-   * missed for the same reason.
+   * The spellings a gateway actually produces, and the reason all eighteen are
+   * asserted rather than one. The key predicate normalises before it matches —
+   * camelCase and separators reduced to hyphens, then a whole-string lower-case —
+   * and then matches a credential word as a substring or as a whole
+   * hyphen-delimited segment of that name. A key list that instead compared
+   * exact, fully-anchored spellings would admit the first four here and every
+   * case, separator and camelCase variant below them, so the table is written to
+   * span all of those axes at once.
    */
   const KEY_SPELLINGS = [
     "token",
@@ -405,8 +413,8 @@ describe("a leg quantity the order-size check cannot compare", () => {
     ["a string", "AAPL"],
     ["a number", 1],
     ["a boolean", true],
-    // Falsy non-arrays are the ones a truthiness guard skips, which is how the
-    // complex-order path kept the wart after its own fix.
+    // Falsy non-arrays are the ones a truthiness guard skips: `0` and `""` reach
+    // the builder unless the guard is a type test, which is why both are here.
     ["zero", 0],
     ["an empty string", ""],
   ];
@@ -484,10 +492,11 @@ describe("a leg quantity the order-size check cannot compare", () => {
   });
 
   it("refuses a non-array legs on dry_run_margin_impact, the third site", async () => {
-    // The twin sweep. dry_run_margin_impact builds its own leg array and had
-    // NEITHER guard, so it carried the identical wart after both order paths
-    // were fixed. Shape only there: `quantity` is optional on that endpoint, so
-    // the quantity check would narrow a read-only tool for no gain.
+    // The twin sweep. dry_run_margin_impact builds its own leg array, so the
+    // guard has to hold at this site too: a guard on the two order paths alone
+    // leaves the identical shape accepted here. Shape only there: `quantity` is
+    // optional on that endpoint, so the quantity check would narrow a read-only
+    // tool for no gain.
     h = await createHarness({ routes: routes() });
     const err = await envelope("tastytrade_dry_run_margin_impact", {
       account_number: ACCT,
@@ -1094,7 +1103,7 @@ describe("the notional cap is enforced on replace, edit and complex-edit", () =>
   it.each(CASES)(
     "%s submits with an explicit 'not measured' warning when the projection carries no figure",
     async (_label, dryRunTool, liveTool, args, routesFor) => {
-      // The half of the cap the tool descriptions were over-claiming. A hard
+      // The half of the cap a tool description can over-claim. A hard
       // block needs a number, and `applyNotionalCap` deliberately does NOT
       // refuse when the dry-run supplies none — refusing would make an
       // instrument class untradeable. So the route succeeds, and the only thing
@@ -1128,10 +1137,11 @@ describe("the notional cap is enforced on replace, edit and complex-edit", () =>
    * API uses that field to say things like "your order will be rejected if you were to
    * try to route it".
    *
-   * Pinned here because the passthrough was reachable but unobserved: deleting
-   * `collectDryRunWarnings` from `runStoredDryRunChecks` left the whole gate green,
-   * while deleting it from the full checks failed 27 tests. Same helper, same one-line
-   * deletion, and only the `place` side was held to it.
+   * Pinned here because coverage of this passthrough is otherwise asymmetric: delete
+   * `collectDryRunWarnings` from the full checks and 27 tests fail, while deleting it
+   * from `runStoredDryRunChecks` clears every gate but this block. Same helper, same
+   * one-line deletion, two different verdicts — so this is what holds the replace and
+   * edit side to it.
    *
    * The two shapes are the ones the merged renderer exists to handle: an array carrying
    * a null element and a `{code}`-only element, and a container that is not an array.
@@ -1241,11 +1251,11 @@ describe("the notional cap is enforced on replace, edit and complex-edit", () =>
       "tastytrade_edit_complex_order",
       "tastytrade_edit_order",
       // Not token-gated, and it earns its place: it is where the instrument
-      // classes with no published size cap are documented, and it would tell
-      // the reader they were "bounded only by MAX_ORDER_NOTIONAL_USD" — the
-      // over-trust this rule exists to catch, on exactly the legs for which the
-      // notional cap is the last local ceiling. It now names the unmeasured
-      // case like the other five.
+      // classes with no published size cap are documented, so an unqualified
+      // "bounded only by MAX_ORDER_NOTIONAL_USD" there is exactly the over-trust
+      // this rule exists to catch, on exactly the legs for which the notional cap
+      // is the last local ceiling. So it names the unmeasured case like the other
+      // five.
       "tastytrade_get_position_limit",
       "tastytrade_place_complex_order",
       "tastytrade_place_order",
@@ -1564,9 +1574,9 @@ describe("a submit the caller has stopped waiting for is not sent", () => {
     // signal, and the submit that was about to happen does not happen.
     //
     // The stall is on /position-limit, which is one of the two SOFT reads — a
-    // failure of either only pushes a warning — so before this the order path
-    // could spend its entire budget on advisory reads and then submit into a
-    // caller that had already been told the call timed out.
+    // failure of either only pushes a warning — so without the abort check the
+    // order path could spend its entire budget on advisory reads and then submit
+    // into a caller that has already been told the call timed out.
     h = await createHarness({
       routes: [
         {

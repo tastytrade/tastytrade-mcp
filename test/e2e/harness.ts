@@ -223,9 +223,16 @@ const EQUITY_INSTRUMENT_RE = /\/instruments\/equities\/[^/]+$/;
  * 0.01 for equities and a 3.00-thresholded 0.05/0.10 for options are the real
  * shapes; see test/e2e/_payloads/tastytrade_get_option_chain_nested.json.
  */
+/**
+ * The schedules tastytrade actually publishes for AAPL, copied from a live cert
+ * response rather than invented. Both carry a threshold band, which the previous
+ * fixture did not — so no test exercised a banded equity schedule, which is
+ * exactly where the band semantics turned out to differ between the two fields.
+ * See resolveTick in src/safety/sanity-checks.ts.
+ */
 const DEFAULT_EQUITY_INSTRUMENT = {
-  "tick-sizes": [{ value: "0.01" }],
-  "option-tick-sizes": [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }],
+  "tick-sizes": [{ threshold: "1.0", value: "0.0001" }, { value: "0.01" }],
+  "option-tick-sizes": [{ threshold: "3.0", value: "0.01" }, { value: "0.05" }],
 };
 
 function claimsEquityInstrument(route: Route): boolean {

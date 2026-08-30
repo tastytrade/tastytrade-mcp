@@ -2,10 +2,12 @@
  * Configuration, startup and read-only mode — end to end.
  *
  * These are the behaviours that protect a careless operator: the default endpoint is
- * the sandbox, pointing at production announces itself on stderr (never stdout, which
- * is the protocol channel), and read-only mode is a startup decision that withholds
- * AND refuses every money-moving tool. All asserted through the real protocol and the
- * real outbound request.
+ * production, which announces itself on stderr (never stdout, which is the protocol
+ * channel) and in the `instructions` an agent reads at initialize; TASTYTRADE_ENV
+ * selects an environment by name and falls back to the SANDBOX on a value it cannot
+ * read; and read-only mode is a startup decision that withholds AND refuses every
+ * money-moving tool. All asserted through the real protocol and the real outbound
+ * request.
  *
  * Two boot paths deliberately: `createHarness` wherever the API base URL is
  * irrelevant, and `bootFromEnv` for the URL-resolution tests — the shared harness
@@ -31,6 +33,10 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createHarness, callOk, callError, loadFixture } from "./harness.js";
 import type { Harness, HarnessOptions } from "./harness.js";
 import {
+  apiEnvironmentOf,
+  resolveApiUrl,
+  serverInstructions,
+  API_ENV_VAR,
   MCP_ORDER_SOURCE,
   TastytradeMCPServer,
   TOOL_ANNOTATIONS,
@@ -114,6 +120,7 @@ const DRY_RUN_TOOLS = [
 
 const MANAGED_ENV = [
   "TASTYTRADE_API_URL",
+  API_ENV_VAR,
   READ_ONLY_ENV_VAR,
   ALLOW_UNKNOWN_API_HOST_ENV_VAR,
   "TASTYTRADE_USER_AGENT",
@@ -283,21 +290,24 @@ async function callToolRaw(
 }
 
 // ===========================================================================
-// 1. Sandbox default
+// 1. The default endpoint, and how to leave it
 // ===========================================================================
 
-describe("sandbox is the default target, at the transport", () => {
-  it("dials the sandbox host when TASTYTRADE_API_URL is unset", async () => {
+describe("production is the default target, at the transport", () => {
+  it("dials production when nothing is configured", async () => {
     const boot = await bootFromEnv();
     await callToolRaw(boot.client, "tastytrade_get_accounts");
 
     expect(boot.requests).toHaveLength(1);
     const [req] = boot.requests;
-    // The property that matters: an operator who configured nothing cannot be
-    // spending real money — the host dialled is the cert sandbox, not
-    // PRODUCTION_API_URL's api.tastyworks.com.
-    expect(req.url).toBe(`${SANDBOX_API_URL}/customers/me/accounts`);
-    expect(hostOf(req.url)).toBe("api.cert.tastyworks.com");
+    // The sandbox does not serve market data, so a server defaulted there
+    // cannot quote — and a default that cannot do the job is not a safe
+    // default, it is one that teaches an operator to override it unread.
+    // Production is therefore the default, and it is announced everywhere it
+    // can be: the stderr banner asserted below, the `instructions` the client
+    // receives on initialize, and `environment` on every order result.
+    expect(req.url).toBe(`${PRODUCTION_API_URL}/customers/me/accounts`);
+    expect(hostOf(req.url)).toBe("api.tastyworks.com");
   });
 
   it("treats a whitespace-only TASTYTRADE_API_URL as unset", async () => {
@@ -305,22 +315,60 @@ describe("sandbox is the default target, at the transport", () => {
     const boot = await bootFromEnv();
     await callToolRaw(boot.client, "tastytrade_get_accounts");
 
-    expect(hostOf(boot.requests[0].url)).toBe("api.cert.tastyworks.com");
+    expect(hostOf(boot.requests[0].url)).toBe("api.tastyworks.com");
   });
 
-  it("starts up silently on the default config, and writes nothing to stdout", async () => {
+  it("announces the default on stderr, and still writes nothing to stdout", async () => {
     const cap = await captureOutput(() => bootFromEnv());
-    expect(liveMoneyBanners(cap.stderr)).toEqual([]);
+    // The default is real money, so the default startup is the loud one.
+    expect(liveMoneyBanners(cap.stderr)).toHaveLength(1);
+    // stdout is the MCP protocol channel: one stray byte corrupts the session
+    // for every client, so the budget is zero — not "small". Unchanged by the
+    // banner, which is the whole reason it goes to stderr.
     expect(cap.stdoutWrites).toEqual([]);
     expect(cap.logs).toBe(0);
+  });
+
+  it("reaches the sandbox with one word, and goes quiet when it does", async () => {
+    process.env[API_ENV_VAR] = "sandbox";
+    const cap = await captureOutput(async () => {
+      const boot = await bootFromEnv();
+      await callToolRaw(boot.client, "tastytrade_get_accounts");
+      return boot;
+    });
+
+    expect(hostOf(cap.result.requests[0].url)).toBe("api.cert.tastyworks.com");
+    expect(liveMoneyBanners(cap.stderr)).toEqual([]);
+  });
+
+  it("falls back to the SANDBOX when TASTYTRADE_ENV cannot be read", async () => {
+    // Fail-closed, and the distinction that matters: UNSET is a default and
+    // gets production; a value that is set but misspelled is a failed
+    // instruction and must not be read as permission to move real money.
+    process.env[API_ENV_VAR] = "sandbx";
+    const cap = await captureOutput(async () => {
+      const boot = await bootFromEnv();
+      await callToolRaw(boot.client, "tastytrade_get_accounts");
+      return boot;
+    });
+
+    expect(hostOf(cap.result.requests[0].url)).toBe("api.cert.tastyworks.com");
+    // No live-money banner, because no live money — but the operator is told
+    // their setting was unreadable rather than left to infer it.
+    expect(liveMoneyBanners(cap.stderr)).toEqual([]);
+    const stderr = cap.stderr.join("\n");
+    expect(stderr).toMatch(/UNRECOGNISED ENVIRONMENT/);
+    expect(stderr).toMatch(/FAILING CLOSED/);
+    expect(stderr).toContain(`${API_ENV_VAR}=production`);
+    expect(cap.stdoutWrites).toEqual([]);
   });
 });
 
 // ===========================================================================
-// 2 + 3. Production opt-in and the warning banner
+// 2 + 3. The production warning banner
 // ===========================================================================
 
-describe("production is opt-in and announces itself on stderr", () => {
+describe("production announces itself on stderr", () => {
   it("dials production and warns, without touching stdout", async () => {
     process.env.TASTYTRADE_API_URL = PRODUCTION_API_URL;
 
@@ -349,7 +397,10 @@ describe("production is opt-in and announces itself on stderr", () => {
     expect(banner).toContain(PRODUCTION_API_URL);
     // The two escape hatches, both actionable without reading the source.
     expect(banner).toContain(`${READ_ONLY_ENV_VAR}=1`);
-    expect(banner).toContain(SANDBOX_API_URL);
+    // The sandbox is now reached by NAMING it, not by unsetting a variable, and
+    // the banner has to say which — an operator who unsets TASTYTRADE_API_URL
+    // expecting the sandbox would land back on production.
+    expect(banner).toContain(`${API_ENV_VAR}=sandbox`);
     expect(banner).toContain("README");
   });
 
@@ -377,12 +428,93 @@ describe("production is opt-in and announces itself on stderr", () => {
   });
 
   it("stays silent for a sandbox server even after traffic", async () => {
+    process.env[API_ENV_VAR] = "sandbox";
     const cap = await captureOutput(async () => {
       const boot = await bootFromEnv();
       await callToolRaw(boot.client, "tastytrade_get_accounts");
       return boot;
     });
     expect(liveMoneyBanners(cap.stderr)).toEqual([]);
+  });
+});
+
+// ===========================================================================
+// 3b. The in-band environment signal
+//
+// The stderr banner above is the loudest thing this server says, and it goes to
+// a log file. An agent cannot read it, so it cannot tell the user which
+// environment it is about to trade in. `instructions` is the protocol's own
+// place for this, and it lands in the model's context for the whole session.
+// ===========================================================================
+
+describe("the client is told which environment it is in, in-band", () => {
+  it("names PRODUCTION and what it costs, on the default config", async () => {
+    const cap = await captureOutput(() => bootFromEnv());
+    const instructions = cap.result.client.getInstructions();
+
+    expect(instructions).toBeDefined();
+    expect(instructions).toContain("PRODUCTION");
+    expect(instructions).toContain(PRODUCTION_API_URL);
+    // The four things the operator asked to be said out loud.
+    expect(instructions).toMatch(/real money/i);
+    expect(instructions).toMatch(/real account control|account control/i);
+    expect(instructions).toMatch(/cannot be undone/i);
+    expect(instructions).toMatch(/care and caution/i);
+  });
+
+  it("names the SANDBOX, and the one thing that does not work there", async () => {
+    process.env[API_ENV_VAR] = "sandbox";
+    const cap = await captureOutput(() => bootFromEnv());
+    const instructions = cap.result.client.getInstructions() ?? "";
+
+    expect(instructions).toContain("SANDBOX");
+    expect(instructions).toContain(SANDBOX_API_URL);
+    expect(instructions).toMatch(/no real money/i);
+    // Measured, not assumed: the sandbox answers /market-data and
+    // /market-metrics with a 502, so a first-time user's first quote fails
+    // through no fault of their own unless something tells them.
+    expect(instructions).toMatch(/market data/i);
+    // And it must not claim real money is at stake when it is not.
+    expect(instructions).not.toContain("PRODUCTION");
+  });
+
+  it("treats an endpoint it cannot vouch for as production", () => {
+    // A gateway, a proxy, a test double. The server has no way to know whether
+    // real funds sit behind it, and "we could not tell" must not present as
+    // "safe" on a money path.
+    const other = serverInstructions("https://gateway.internal.example");
+    expect(other).toContain("UNRECOGNISED ENDPOINT");
+    expect(other).toMatch(/treat it as production/i);
+    expect(other).toMatch(/real money may be at risk/i);
+    expect(other).not.toContain("no real money");
+  });
+
+  it("says when read-only mode is withholding the write surface", () => {
+    const on = serverInstructions(PRODUCTION_API_URL, true);
+    expect(on).toMatch(/read-only mode is on/i);
+    expect(on).toMatch(/withheld/i);
+    // Absent when it is not on, so the sentence is a fact rather than boilerplate.
+    expect(serverInstructions(PRODUCTION_API_URL, false)).not.toMatch(
+      /read-only mode/i,
+    );
+  });
+
+  it("agrees with the environment stamped on an order result", async () => {
+    // Two surfaces state the environment: `instructions` at initialize and
+    // `environment` on every order route. If they could disagree, the safer
+    // reading would be the wrong one exactly when it mattered.
+    for (const [envValue, expected] of [
+      [undefined, "production"],
+      ["sandbox", "sandbox"],
+    ] as const) {
+      if (envValue === undefined) delete process.env[API_ENV_VAR];
+      else process.env[API_ENV_VAR] = envValue;
+
+      const cap = await captureOutput(() => bootFromEnv());
+      const instructions = cap.result.client.getInstructions() ?? "";
+      expect(instructions).toContain(expected.toUpperCase());
+      expect(apiEnvironmentOf(resolveApiUrl(process.env))).toBe(expected);
+    }
   });
 });
 
@@ -399,11 +531,12 @@ describe("read-only mode is enabled only by an affirmative value", () => {
    */
   const FALSY = ["0", "false", "FALSE", "", "  "];
   /**
-   * Anything else. These USED to leave the full write surface live — an
-   * operator who wrote `TASTYTRADE_READ_ONLY=yes` got 84 tools and every
-   * money-moving path enabled while believing they were off. That is a
-   * fail-open on a safety control, so an unrecognised value now enables
-   * read-only mode and says so on stderr.
+   * Anything else. An unrecognised value ENABLES read-only mode and says so on
+   * stderr. An operator who writes `TASTYTRADE_READ_ONLY=yes` is reaching for
+   * the switch, and a safety control must not be left disabled by a typo: unset
+   * is a default, a value that is set but unreadable is a failed instruction,
+   * and the two must not land in the same place. The same rule TASTYTRADE_ENV
+   * follows, for the same reason.
    */
   const UNRECOGNISED = ["yes", "on", "enabled", "Y", "no", "off", "2", "ture"];
 
@@ -642,6 +775,7 @@ describe("dry-run previews stay available in read-only mode", () => {
       "order-type": "Limit",
       "time-in-force": "Day",
       source: MCP_ORDER_SOURCE,
+      "automated-source": true,
       price: "1.50",
       "price-effect": "Debit",
       legs: [
@@ -771,8 +905,9 @@ describe("one version, reported identically everywhere", () => {
     });
     await callOk(h, "tastytrade_get_accounts");
 
-    // The three observable reports of the version must agree; they drifted once
-    // because each carried its own literal.
+    // The three observable reports of the version must agree, and all three read
+    // PKG.version rather than a literal of their own: three literals are three
+    // things to keep in step.
     expect(h.lastRequest()?.headers["user-agent"]).toBe(
       `${SERVER_NAME}/${PKG.version}`,
     );
@@ -1263,12 +1398,12 @@ describe("the library barrel is not an entrypoint", () => {
   /**
    * `package.json` sets `main: dist/index.js` and the top half of that file is a
    * deliberate public API re-export, so importing it as a library is invited.
-   * Module scope nevertheless ran `new TastytradeMCPServer(); server.run()`
-   * unconditionally, under a comment — "Start server if run directly" —
-   * describing a guard that had never been written. A consumer who imported the
-   * barrel got JSON-RPC frames on THEIR stdout, an event loop held open forever,
-   * and an application whose own stdin was now a remote control for
-   * `tastytrade_place_order` against a funded account.
+   * Module scope therefore starts the server only behind
+   * `isEntryModule(import.meta.url, process.argv[1])`. Without that guard, an
+   * unconditional `new TastytradeMCPServer(); server.run()` at module scope hands
+   * a consumer who imported the barrel JSON-RPC frames on THEIR stdout, an event
+   * loop held open forever, and an application whose own stdin is now a remote
+   * control for `tastytrade_place_order` against a funded account.
    */
 
   it("attaches nothing to stdin and writes nothing when imported", async () => {
@@ -1404,8 +1539,9 @@ describe("destructive tool descriptions do not undersell the risk", () => {
   );
 
   it("gives cancel_order more than four words to hesitate over", () => {
-    // It shipped as the literal string "Cancel a working order" — the shortest
-    // description in the registry, on the most consequential ungated tool in it.
+    // The most consequential ungated tool in the registry, so its description
+    // has to carry the risk rather than name the operation. Four words —
+    // "Cancel a working order" — is a label, and a label reads as routine.
     expect(
       registryDescription("tastytrade_cancel_order").length,
     ).toBeGreaterThan(120);

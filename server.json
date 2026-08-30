@@ -18,12 +18,12 @@
         "readOnly": 70,
         "write": 2,
         "destructive": 12,
-        "note": "Every destructive tool requires a single-use confirmation token issued by its matching dry_run_* tool, valid for 60 seconds and bound to a hash of the submitted arguments."
+        "note": "Twelve destructive tools. Five \u2014 place_order, edit_order, replace_order, place_complex_order, edit_complex_order \u2014 require a single-use confirmation token from their matching dry_run_* tool, valid 60 seconds and bound to a hash of the arguments. The other seven carry none: the two order cancels and five watchlist/quote-alert mutations."
       },
       "install": {
-        "note": "Install by cloning and building. This server publishes no container image and is not published to npm, so there is no docker pull and no npx invocation. A Dockerfile is included for anyone who wants to build their own image.",
+        "note": "Install by cloning and building: no image is published and no npm package, so no docker pull and no npx. A Dockerfile is included for building your own.",
         "cloneAndBuild": {
-          "description": "Clone the repository, build it, and point your MCP client at the compiled entrypoint.",
+          "description": "Clone, build, and point your MCP client at dist/index.js.",
           "setup": [
             "git clone https://github.com/tastytrade/tastytrade-mcp.git",
             "cd tastytrade-mcp",
@@ -36,7 +36,7 @@
                 "command": "node",
                 "args": ["/absolute/path/to/tastytrade-mcp/dist/index.js"],
                 "env": {
-                  "TASTYTRADE_API_URL": "https://api.cert.tastyworks.com",
+                  "TASTYTRADE_ENV": "production",
                   "TASTYTRADE_CLIENT_ID": "your_client_id",
                   "TASTYTRADE_CLIENT_SECRET": "your_client_secret",
                   "TASTYTRADE_REFRESH_TOKEN": "your_refresh_token"
@@ -46,13 +46,14 @@
           },
           "notes": [
             "args must be an absolute path; MCP clients do not resolve ~ or relative paths.",
-            "A .env file in the repository is NOT auto-loaded. Credentials must come from the client's env block, or be exported in the launching shell."
+            "A .env file is NOT auto-loaded. Credentials come from the client's env block, or the launching shell.",
+            "The block above names production explicitly \u2014 real funds. Change TASTYTRADE_ENV to sandbox for no real money. An absent variable also means production, so naming it is what keeps the config honest."
           ]
         }
       },
       "safety": {
         "rateLimits": {
-          "scheme": "Per-second. These are tastytrade's published request limits, enforced in-process and charged once per tool call.",
+          "scheme": "Per-second, from tastytrade's published limits, charged in-process once per tool call.",
           "global": "50/sec, across every tool",
           "perEndpoint": {
             "marketData": "2/sec",
@@ -65,19 +66,23 @@
             "singleFutureOption": "3/sec",
             "positions": "1/sec",
             "balances": "1/sec",
+            "tradingStatus": "1/sec",
             "accounts": "1/sec"
           },
-          "howItApplies": "Every call is charged against the global cap; a call reaching one of the endpoints above is charged against that endpoint's ceiling as well. Tools that are not in the table carry no per-endpoint ceiling, except that the twelve destructive tools are additionally rate-limited by an internal safety cap: a burst of order submissions or cancellations can be refused while the global cap still has room. That cap is a backstop rather than a published budget, so it is not quoted here and a refusal does not name it. Exhaustion returns a rate_limit_exceeded ToolError carrying retry_after_ms.",
-          "planningNote": "A bucket holds one second of budget, so a 1/sec endpoint permits one call and then a full second of waiting; there is nothing to burst through. Size a polling loop per endpoint rather than per agent, and stream live prices over DXLink instead of polling for them."
+          "howItApplies": "Every call is charged against the global cap, plus an endpoint ceiling where one applies. tradingStatus has no tool: the safety layer charges it from inside a submit.",
+          "planningNote": "A bucket holds one second of budget, so a 1/sec endpoint permits one call and then a full second of waiting. Size polling per endpoint, not per agent, and stream live prices over DXLink."
         },
         "notes": [
-          "The API host defaults to the sandbox. Point TASTYTRADE_API_URL at https://api.tastyworks.com only when you intend to trade real money.",
-          "Set TASTYTRADE_READ_ONLY=true to withhold every write and destructive tool.",
+          "The endpoint defaults to PRODUCTION (https://api.tastyworks.com): real accounts, real funds. TASTYTRADE_ENV=sandbox selects https://api.cert.tastyworks.com; prod, live, cert, staging and sbx are also understood. A value the server cannot read resolves to the sandbox and warns on stderr.",
+          "The sandbox serves no market data (HTTP 502 on every market-data and market-metrics route), which is why production is the default.",
+          "Production is announced three ways: a LIVE TRADING stderr banner, the environment named in the initialize instructions, and an environment member (production, sandbox or other) on every order result.",
+          "TASTYTRADE_READ_ONLY: 1 or true withholds and refuses every write and destructive tool; 0, false, empty and unset allow them (case-insensitive, trimmed). Any other value ENABLES read-only mode and warns \u2014 a setting that cannot be read is never permission to move money.",
           "MAX_ORDER_NOTIONAL_USD caps single-order buying-power impact; the default is 50000.",
-          "An unrecognised host in TASTYTRADE_API_URL is a startup refusal rather than a warning: the server exits non-zero rather than POST the refresh token and client secret to a host it does not recognise. TASTYTRADE_ALLOW_UNKNOWN_API_HOST=<hostname> acknowledges one by name, for a proxy or a gateway.",
-          "A resources/read is charged the same per-endpoint ceilings as the tool that reaches the same endpoint, plus the global cap at the template's declared fan-out."
+          "TASTYTRADE_API_URL is an explicit base URL for a gateway or a test double and wins over TASTYTRADE_ENV. An unrecognised host in it stops the server unless TASTYTRADE_ALLOW_UNKNOWN_API_HOST names it.",
+          "A resources/read is charged the per-endpoint ceilings of the tool reaching the same endpoint, plus the global cap at its declared fan-out."
         ]
-      }
+      },
+      "licence": "MIT for the software (LICENSE). The vendored docs under tastytrade-llms-txt-docs/ are a runtime dependency licensed separately; NOTICE grants the right to redistribute them with this software."
     }
   }
 }

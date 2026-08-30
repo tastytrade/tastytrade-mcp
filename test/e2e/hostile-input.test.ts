@@ -310,6 +310,11 @@ describe("prototype pollution through the translation seam", () => {
       "time-in-force",
       "order-type",
       "source",
+      // Server-authored, like `source`: the regulatory flag on every order this
+      // server builds. Listed here because this whitelist is the statement of
+      // what may reach the wire, so a new outbound key has to be added on
+      // purpose rather than arriving with a change nobody read.
+      "automated-source",
       "legs",
     ]);
     expect(Object.keys(order.legs![0]!)).toEqual([
@@ -357,7 +362,12 @@ describe("prototype pollution through the translation seam", () => {
         }]
       }`),
     );
-    expect(Object.keys(complex)).toEqual(["type", "source", "orders"]);
+    expect(Object.keys(complex)).toEqual([
+      "type",
+      "source",
+      "automated-source",
+      "orders",
+    ]);
     // `source` is a real optional field on this body, and it is now written
     // unconditionally by the builder from a server-side constant — so the
     // injected prototype value cannot supply it or displace it.
@@ -394,6 +404,7 @@ describe("prototype pollution through the translation seam", () => {
       "time-in-force": "Day",
       "order-type": "Limit",
       source: MCP_ORDER_SOURCE,
+      "automated-source": true,
       price: "1.00",
       "price-effect": "Debit",
       legs: [

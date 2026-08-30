@@ -15,7 +15,16 @@
 # `-d` / `--detach` is meaningless here for the same reason.
 #
 # No credentials are baked into any layer. Supply them at run time with
-# `--env-file` or `-e` (see server.json for ready-to-paste client config).
+# `--env-file` or `-e`. The variables themselves — three credentials plus the
+# environment switch — are documented in `.env.sample` and in the README.
+#
+# THE DEFAULT ENDPOINT IS PRODUCTION. A container given credentials and nothing
+# else talks to https://api.tastyworks.com: real accounts, real funds, orders
+# that cannot be undone. Pass `-e TASTYTRADE_ENV=sandbox` for the sandbox — it
+# serves no market data, so quotes and market metrics do not work there — and
+# `-e TASTYTRADE_READ_ONLY=1` to withhold every write and destructive tool. On
+# every production start the server prints a LIVE TRADING banner to stderr,
+# which lands in your container logs.
 #
 # ---- Hardened invocation --------------------------------------------------
 #
@@ -33,9 +42,10 @@
 #     --env-file .env \
 #     tastytrade-mcp-server
 #
-# It DOES need outbound HTTPS to whatever TASTYTRADE_API_URL points at, so
-# `--network none` breaks it. Restricting egress to the broker host is the
-# right control if your runtime can express it.
+# It DOES need outbound HTTPS to whichever endpoint it resolves — from
+# TASTYTRADE_ENV, from an explicit TASTYTRADE_API_URL, or the production
+# default — so `--network none` breaks it. Restricting egress to the broker
+# host is the right control if your runtime can express it.
 #
 # Why each flag, briefly, so the list is auditable rather than cargo-culted:
 #   --read-only              the server writes nothing to disk; the only
@@ -57,6 +67,10 @@
 #   docker run --rm --env-file .env --entrypoint node \
 #     tastytrade-mcp-server dist/doctor.js
 #
+# Read its exit code, do not just gate on 0: a production endpoint is a WARN, so
+# a production container exits 3 ("nothing failed, nothing verified") on every
+# clean run. 1 is a real failure and names the check that failed.
+#
 # Build for both supported architectures:
 #   docker buildx build --platform linux/amd64,linux/arm64 \
 #     -t tastytrade-mcp-server .
@@ -67,7 +81,7 @@
 #   docker build --build-arg NODE_IMAGE=node:22-alpine@sha256:… .
 # It is a tag by default deliberately: a hard-pinned digest with no automation
 # to bump it silently freezes the image on an unpatched base, which is the
-# worse failure for a long-lived published image.
+# worse failure for a long-lived image.
 ARG NODE_IMAGE=node:22-alpine
 
 # ---- stage 1: build (devDependencies + TypeScript toolchain present) ------
@@ -107,8 +121,9 @@ LABEL org.opencontainers.image.licenses="MIT"
 
 # The MCP registry resolves an OCI package to its server entry through this
 # label and REJECTS a submission that lacks it. It must equal server.json's
-# `name` exactly; the test suite pins the two together so they
-# cannot drift. Not an org.opencontainers.* key, so it is spelled out in full.
+# `name` exactly, and nothing in the build or the test suite compares the two:
+# rename one and you rename the other in the same commit. Not an
+# org.opencontainers.* key, so it is spelled out in full.
 LABEL io.modelcontextprotocol.server.name="io.github.tastytrade/tastytrade-mcp"
 
 ENV NODE_ENV=production

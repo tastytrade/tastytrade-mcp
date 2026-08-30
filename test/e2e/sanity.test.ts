@@ -1399,6 +1399,7 @@ describe("sanity checks: the checked body is the submitted body", () => {
       "time-in-force": "Day",
       "order-type": "Limit",
       source: MCP_ORDER_SOURCE,
+      "automated-source": true,
       price: "10.00",
       "price-effect": "Debit",
       legs: [

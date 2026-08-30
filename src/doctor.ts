@@ -78,7 +78,9 @@ import type { BoundedTally } from "./safety/bounded-text.js";
 import {
   ALLOW_UNKNOWN_API_HOST_ENV_VAR,
   PRODUCTION_API_URL,
+  API_ENV_VAR,
   SANDBOX_API_URL,
+  resolveApiUrl,
   SWAPPED_DOMAIN_NOTE as GUARD_SWAPPED_DOMAIN_NOTE,
   apiEndpointForDisplay,
   atSignOutsideUserinfo,
@@ -675,10 +677,13 @@ export { urlUserinfo } from "./credential-target.js";
  * prints. Refusing to diagnose is not the same as refusing to transmit.
  */
 export function inspectApiUrl(env: NodeJS.ProcessEnv): EndpointState {
-  // Mirrors resolveApiUrl() in the dispatcher: trim, and fall back to the
-  // SANDBOX so an operator who made no choice cannot land on production.
+  // The dispatcher's own resolver, called rather than mirrored: one rule in one
+  // place is what stops the preflight naming an endpoint the server would not
+  // use. TASTYTRADE_API_URL first, then TASTYTRADE_ENV, then PRODUCTION — and
+  // the SANDBOX only when TASTYTRADE_ENV was set to something unreadable, which
+  // is a failed instruction rather than an absent one.
   const configured = env.TASTYTRADE_API_URL?.trim();
-  const apiUrl = configured ? configured : SANDBOX_API_URL;
+  const apiUrl = resolveApiUrl(env);
   // Clipped where it is built, not at each of its seven print sites: `display`
   // is documented as the only form this command prints, so bounding it here is
   // what makes that documentation true for a hostile value as well as a
@@ -690,7 +695,7 @@ export function inspectApiUrl(env: NodeJS.ProcessEnv): EndpointState {
   const credentialTarget = inspectCredentialTarget(apiUrl, env);
   const source = configured
     ? "from TASTYTRADE_API_URL"
-    : "TASTYTRADE_API_URL is unset — using the sandbox default";
+    : "resolved from TASTYTRADE_ENV, or the production default when unset";
   const details: string[] = [`Base URL: ${display} (${source})`];
   const base = { id: "api-url", title: "API endpoint" };
   const targetData = {
@@ -846,7 +851,7 @@ export function inspectApiUrl(env: NodeJS.ProcessEnv): EndpointState {
     summary =
       "PRODUCTION API — real money is at risk; every order affects real funds";
     details.push(
-      `For the sandbox instead, unset TASTYTRADE_API_URL (default ${SANDBOX_API_URL}).`,
+      `For the sandbox instead, set ${API_ENV_VAR}=sandbox.`,
       `To withhold every write and destructive tool, set ${READ_ONLY_ENV_VAR}=1.`,
     );
   } else if (!credentialTarget.recognised) {

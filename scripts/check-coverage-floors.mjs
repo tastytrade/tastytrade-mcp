@@ -8,10 +8,10 @@
  * under what is currently achieved... Ratchet them UP as coverage improves;
  * never down." The floors are enforced by Jest. The policy is not, and the
  * "Achieved:" annotations beside each group are the only way a maintainer can
- * check it — so when they rot, the policy lapses silently. It had: the HTTP
- * client's branch floor sat 22.5 points under its real coverage, on the one
- * file CONTRIBUTING.md singles out as never to be lowered, which means a fifth
- * of its branch coverage could have been lost with the gate still green.
+ * check it — so when they rot, the policy lapses silently. A floor sitting far
+ * under its group's real coverage is the shape that matters: a large share of
+ * that file's branch coverage could be lost with the gate still green,
+ * including on the files CONTRIBUTING.md singles out as never to be lowered.
  *
  * WHAT IT DOES NOT CHECK, AND WHY NOT
  *

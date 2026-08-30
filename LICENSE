@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The MIT License above covers the software in this repository. It does NOT cover
+the contents of the `tastytrade-llms-txt-docs/` directory, which is a copy of
+tastytrade's own API documentation and is licensed separately — including a
+grant that makes the four files the server requires at runtime lawful to
+redistribute with it. See NOTICE.
