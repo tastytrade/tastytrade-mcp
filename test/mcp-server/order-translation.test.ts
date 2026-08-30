@@ -210,6 +210,39 @@ describe("buildOrderBody — snake_case → kebab-case", () => {
   });
 });
 
+describe("the dry-run docs describe the envelope the broker really sends", () => {
+  /**
+   * A clean dry-run comes back with `upstream` = {order, buying-power-effect,
+   * fee-calculation, notes, warnings} and NO `errors` key — measured against a
+   * live cert response, not inferred. Prose that says "if upstream.errors[] is
+   * non-empty" reads as though the array is always there, and caller code
+   * written to it (`upstream.errors.length`) throws on every success.
+   */
+  const DRY_RUNS = [
+    "tastytrade_dry_run_order",
+    "tastytrade_dry_run_replace_order",
+    "tastytrade_dry_run_edit_order",
+    "tastytrade_dry_run_complex_order",
+    "tastytrade_dry_run_edit_complex_order",
+  ] as const;
+
+  it.each(DRY_RUNS)("%s says the errors key is omitted when clean", (name) => {
+    const d = TOOL_METADATA[name]?.description ?? "";
+    expect(d).toContain("OMITS the key entirely");
+    // And offers the safe test, not just the warning.
+    expect(d).toMatch(/upstream\.errors \?\? \[\]/);
+  });
+
+  it.each(DRY_RUNS)("%s does not declare errors as required", (name) => {
+    // The schema half. Requiring a key the broker omits would make every clean
+    // dry-run fail validation at the client.
+    const up = TOOL_METADATA[name]?.outputSchema?.properties?.upstream as
+      { required?: string[]; properties?: Record<string, unknown> } | undefined;
+    expect(up?.properties).toHaveProperty("errors");
+    expect(up?.required ?? []).not.toContain("errors");
+  });
+});
+
 describe("provenance is discoverable from the read side", () => {
   /**
    * Setting `source` on submit is only half of "we can tell where an order came
