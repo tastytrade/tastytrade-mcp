@@ -6,6 +6,7 @@ import {
   buildComplexOrderBody,
   snakeToKebabParams,
 } from "../../src/mcp-server/index.js";
+import { TOOL_METADATA } from "../../src/mcp-server/tool-metadata.js";
 
 /**
  * Mirrors MCP_ORDER_SOURCE in src/mcp-server/index.ts, which is now
@@ -184,9 +185,82 @@ describe("buildOrderBody — snake_case → kebab-case", () => {
       MCP_ORDER_SOURCE,
     );
   });
+
+  it("declares the order automated, and will not let a caller unset it", () => {
+    // orders.md: "Set `automated-source: true` for algorithmically-generated
+    // orders. This may affect order handling and regulatory reporting." Every
+    // order this server builds originates from an agent calling a tool, so the
+    // flag is true for all of them, unconditionally.
+    //
+    // Server-side and non-overridable for the same reason `source` is: a
+    // regulatory attribute a caller can turn off is not an attribute. Note the
+    // agent has no way to ask for this — `automated_source` is not an input
+    // property on any tool — so the spoof below is what an argument-injected
+    // caller would try, not something the schema invites.
+    const base = { time_in_force: "Day", order_type: "Market", legs: [] };
+    expect(buildOrderBody(base)["automated-source"]).toBe(true);
+    expect(
+      buildOrderBody({ ...base, automated_source: false })["automated-source"],
+    ).toBe(true);
+    expect(
+      buildOrderBody({ ...base, "automated-source": false })[
+        "automated-source"
+      ],
+    ).toBe(true);
+  });
+});
+
+describe("provenance is discoverable from the read side", () => {
+  /**
+   * Setting `source` on submit is only half of "we can tell where an order came
+   * from". The other half is that somebody reading orders back knows the field
+   * exists and what value to look for — and the API echoes `source` on a read
+   * while NOT echoing `automated-source`, so `source` is the only provenance the
+   * read side carries. That asymmetry is easy to lose in an edit, so the note is
+   * pinned per tool rather than trusted.
+   */
+  const ORDER_READS = [
+    "tastytrade_search_orders",
+    "tastytrade_get_orders",
+    "tastytrade_get_live_orders",
+    "tastytrade_get_order",
+    "tastytrade_search_customer_orders",
+    "tastytrade_get_customer_live_orders",
+    "tastytrade_get_complex_orders",
+    "tastytrade_get_live_complex_orders",
+  ] as const;
+
+  it.each(ORDER_READS)("%s documents the source field", (name) => {
+    const description = TOOL_METADATA[name]?.description ?? "";
+    expect(description).toContain("PROVENANCE:");
+    expect(description).toContain("tastytrade-mcp/<version>");
+    // The read side must not be described as carrying the flag, because it does
+    // not — an operator told otherwise would look for a field that never comes.
+    expect(description).toMatch(/automated-source[^.]*NOT echoed back/);
+  });
+
+  it("names a value that matches what the builders actually send", () => {
+    // The description says orders carry `tastytrade-mcp/<version>`; this is the
+    // half that keeps that true if the stamp is ever renamed.
+    const base = { time_in_force: "Day", order_type: "Market", legs: [] };
+    expect(buildOrderBody(base).source).toMatch(/^tastytrade-mcp\//);
+  });
 });
 
 describe("buildComplexOrderBody", () => {
+  it("stamps the source and the automated flag, unsuppressably", () => {
+    // The complex path is a separate builder, so it is a separate assertion:
+    // the two have drifted apart before on exactly this kind of field.
+    const body = buildComplexOrderBody({
+      type: "OCO",
+      orders: [{ time_in_force: "Day", order_type: "Market", legs: [] }],
+      source: "forged",
+      automated_source: false,
+    });
+    expect(body.source).toBe(MCP_ORDER_SOURCE);
+    expect(body["automated-source"]).toBe(true);
+  });
+
   it("kebab-cases the trigger-order and component orders", () => {
     const body = buildComplexOrderBody({
       type: "OTOCO",

@@ -354,6 +354,30 @@ The reason this project exists. In order of how much they protect you:
    and stripped of display-hostile codepoints, so it cannot impersonate this
    server's own fields.
 
+### Order attribution
+
+Every order this server submits is tagged, server-side, with two fields from
+tastytrade's order API:
+
+- **`source`** — `tastytrade-mcp/<version>`, so an order placed through this
+  server is distinguishable from one entered by hand or by another integration.
+  tastytrade echoes `source` back on order reads, so it is visible in order
+  history; there is no `source` query filter, so filter on it client-side.
+- **`automated-source: true`** — tastytrade's flag for an algorithmically
+  generated order. Every order here originates from an agent calling a tool, so
+  it is set on all of them. tastytrade's own documentation notes the flag "may
+  affect order handling and regulatory reporting". It is **not** echoed back on a
+  read, so `source` is the only attribution the read side carries.
+
+Both are written by the server and cannot be set, forged or suppressed by the
+caller — neither is an input property on any tool. An attribution a caller can
+switch off is not an attribution.
+
+The one exception is the PAIRS ratio-threshold edit, which is left unstamped
+deliberately: tastytrade documents that request body as exactly
+`ratio-price-comparator` plus `ratio-price-threshold`, so an extra field there is
+unverified against the spec. It creates no order and changes no leg.
+
 ### What it does not do
 
 - **It does not authenticate the caller.** On stdio there is one caller per

@@ -1461,21 +1461,28 @@ function buildDryRunReplaceEditToolDefs(): Tool[] {
  * the field must appear on both sides or every place/replace/edit fails with a
  * spurious binding mismatch.
  *
- * The version suffix is this stamp's own, not the package version: bump it when the
- * server's order-building behaviour changes materially.
+ * The version suffix is the package version, so the stamp moves with a release
+ * rather than needing its own bump. Two sides read it — this server writes it and
+ * tastytrade's order flow reports it back on every order read — so the value is
+ * held as a literal in test/mcp-server/order-translation.test.ts, which makes
+ * changing it a deliberate two-sided edit.
  *
- * OPEN QUESTION: `automated-source` is NOT set, and that is not yet a decision.
- * orders.md says "Set `automated-source: true` for algorithmically-generated
- * orders. This may affect order handling and REGULATORY REPORTING." Every order
- * here originates from an agent calling a tool, so the flag is applicable on its
- * face, and its absence means those orders are reported as if a human typed them.
+ * `automated-source: true` travels with it on the same four builders. orders.md:
+ * "Set `automated-source: true` for algorithmically-generated orders. This may
+ * affect order handling and REGULATORY REPORTING." Every order this server builds
+ * originates from an agent calling a tool — there is no path through it that a
+ * human types — so the flag is true for all of them, unconditionally, and setting
+ * it is what makes the report match what happened.
  *
- * It is deliberately still absent: asserting a flag the broker ties to regulatory
- * reporting is a compliance decision, not an engineering one. If the answer is yes,
- * add `"automated-source": true` beside `source: MCP_ORDER_SOURCE` in the four
- * shared builders — the same four, for the same reason as above — leave
- * buildComplexEditBody unstamped, document it, and pin it in the
- * order-translation tests exactly as `source` is pinned.
+ * Both are server-side and non-overridable, and for the same reason: an
+ * attribution a caller can forge is not an attribution, and a regulatory
+ * attribute a caller can switch off is not an attribute. Neither `source` nor
+ * `automated_source` is an input property on any tool.
+ *
+ * buildComplexEditBody stays unstamped, deliberately. orders.md enumerates that
+ * request body as exactly `ratio-price-comparator` + `ratio-price-threshold`, so
+ * an extra field there is unverified against the spec, and an unattributed
+ * threshold edit beats a rejected one. It creates no order and changes no leg.
  */
 export const MCP_ORDER_SOURCE = `tastytrade-mcp/${PACKAGE_VERSION}`;
 
@@ -1489,6 +1496,7 @@ function buildReplaceBody(args: any): Record<string, unknown> {
     "order-type": args.order_type,
     "time-in-force": args.time_in_force,
     source: MCP_ORDER_SOURCE,
+    "automated-source": true,
   };
   if (args.price !== undefined) {
     body.price = args.price;
@@ -1511,7 +1519,10 @@ function buildEditBody(args: any): Record<string, unknown> {
   // PATCH /orders/{id} takes a partial of the order request body, which
   // includes `source`, so MCP-originated edits are attributed too. Its
   // complex-order counterpart is not — see MCP_ORDER_SOURCE.
-  const body: Record<string, unknown> = { source: MCP_ORDER_SOURCE };
+  const body: Record<string, unknown> = {
+    source: MCP_ORDER_SOURCE,
+    "automated-source": true,
+  };
   // The /orders/{id}/dry-run endpoint re-validates the whole order, so it
   // requires order-type + time-in-force even for a price-only edit.
   if (args.order_type !== undefined) body["order-type"] = args.order_type;
@@ -1735,6 +1746,7 @@ export function buildComplexOrderBody(args: any): Record<string, unknown> {
   const body: Record<string, unknown> = { type: args.type };
   // Server-controlled attribution; overrides anything the client sent.
   body.source = MCP_ORDER_SOURCE;
+  body["automated-source"] = true;
   if (args.trigger_order !== undefined) {
     body["trigger-order"] = buildComponentOrderBody(args.trigger_order);
   }
@@ -2651,6 +2663,7 @@ export function buildOrderBody(args: any): OutboundOrderBody {
     "time-in-force": args.time_in_force,
     "order-type": args.order_type,
     source: MCP_ORDER_SOURCE,
+    "automated-source": true,
     ...(args.price && { price: args.price, "price-effect": args.price_effect }),
     ...(args.stop_trigger && { "stop-trigger": args.stop_trigger }),
     legs: (args.legs ?? []).map((leg: any) => ({
