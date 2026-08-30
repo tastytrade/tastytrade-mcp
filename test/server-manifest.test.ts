@@ -27,6 +27,7 @@ import {
   TastytradeMCPServer,
 } from "../src/mcp-server/index.js";
 import { accessClassFor } from "../src/mcp-server/annotations.js";
+import { REQUIRED_DOCS } from "../src/resources/static/vendored-docs.js";
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -111,6 +112,45 @@ describe("server.json agrees with the code it describes", () => {
     if (surface.write !== undefined) expect(surface.write).toBe(counts.write);
     if (surface.destructive !== undefined)
       expect(surface.destructive).toBe(counts.destructive);
+  });
+});
+
+describe("the licence story covers what the server needs to run", () => {
+  /**
+   * The software is MIT; the vendored tastytrade documentation is not. Four of
+   * those files are read at module load, so a recipient who received only the
+   * MIT grant could fork this repository and still not lawfully ship anything
+   * that starts. NOTICE is what closes that, which makes it load-bearing rather
+   * than decorative — so it is asserted rather than reviewed.
+   */
+  const notice = read("NOTICE");
+
+  it("ships a NOTICE that names every doc the server requires at runtime", () => {
+    for (const file of REQUIRED_DOCS) {
+      expect(notice).toContain(file);
+    }
+  });
+
+  it("grants redistribution of the vendored docs, and says it is not MIT", () => {
+    expect(notice).toMatch(/redistribute/i);
+    expect(notice).toMatch(/does NOT place it under the MIT License/);
+    // The grant has to survive being copied, or a fork's fork is unlicensed.
+    expect(notice).toMatch(/retained with the copy/i);
+  });
+
+  it("is pointed to from LICENSE, README and server.json", () => {
+    // A reader who opens only one of them must not conclude everything is MIT.
+    expect(read("LICENSE")).toContain("NOTICE");
+    expect(read("README.md")).toContain("[NOTICE](NOTICE)");
+    expect(JSON.stringify(published())).toContain("NOTICE");
+  });
+
+  it("no longer claims the vendored docs carry no licence of their own", () => {
+    // The exact sentence this replaced. A revert would put the hole back
+    // silently, since nothing about it breaks a build.
+    expect(read("README.md")).not.toMatch(
+      /carries no licence notice of its own/,
+    );
   });
 });
 

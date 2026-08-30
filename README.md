@@ -392,11 +392,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for conventions and
 
 ## Third-party documentation
 
-`tastytrade-llms-txt-docs/` is a copy of tastytrade's own public API
-documentation. Four of those files are a **runtime dependency** — the static MCP
-resources read them at module load — and the rest are the API reference the test
-suite validates the tool schemas against. That material is tastytrade's, not
-covered by this repository's licence, and carries no licence notice of its own.
+`tastytrade-llms-txt-docs/` is a point-in-time copy of tastytrade's own public
+API documentation. Four of those files are a **runtime dependency** — the static
+MCP resources read them at module load, so the directory has to ship alongside
+the built server or it does not start — and the rest are the API reference the
+test suite validates the tool schemas against.
+
+That material is tastytrade's and is **not** under this repository's MIT licence.
+It carries its own licence in [NOTICE](NOTICE), which grants the right to
+reproduce and redistribute it for the purpose of using, building or distributing
+this software. That grant exists because without it the MIT licence on the code
+would not be usable: you could lawfully fork the repository and still not be able
+to ship anything that runs. Keep `NOTICE` with any copy you distribute.
 
 ## Disclaimer
 
@@ -427,4 +434,6 @@ buy or sell anything, and nothing here is financial advice.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE) for the software, and [NOTICE](NOTICE) for the
+vendored tastytrade documentation under `tastytrade-llms-txt-docs/`, which is
+licensed separately.

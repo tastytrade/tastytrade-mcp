@@ -1,0 +1,47 @@
+NOTICE
+======
+
+This repository contains two kinds of material, under two different licences.
+
+
+1. THE SOFTWARE
+---------------
+
+Everything outside the `tastytrade-llms-txt-docs/` directory — the TypeScript
+under `src/`, the tests, the build, the configuration, and the documentation
+written for this project — is Copyright (c) 2026 tastytrade and is licensed
+under the MIT License. See LICENSE.
+
+
+2. THE VENDORED tastytrade DOCUMENTATION
+----------------------------------------
+
+`tastytrade-llms-txt-docs/` is a point-in-time copy of tastytrade's own public
+API documentation. tastytrade retains copyright in that material, and including
+it in this repository does NOT place it under the MIT License.
+
+Four of those files are a RUNTIME DEPENDENCY of the software, not optional
+reference material. The static MCP resources read them at module load, so the
+directory must ship alongside the built server or the server does not start:
+
+    tastytrade-llms-txt-docs/docs/api-overview.md
+    tastytrade-llms-txt-docs/docs/order-flow.md
+    tastytrade-llms-txt-docs/docs/streaming-account-data.md
+    tastytrade-llms-txt-docs/docs/streaming-market-data.md
+
+The MIT grant on the software would not be usable without them: a recipient
+could lawfully copy, modify and redistribute the code, and still not be able to
+ship anything that runs. So, to make that grant effective in practice,
+tastytrade grants to any person obtaining a copy of this repository a
+non-exclusive, royalty-free licence to reproduce and redistribute the contents
+of `tastytrade-llms-txt-docs/`, in whole or in part, for the purpose of using,
+building, modifying or distributing this software or a derivative work of it,
+provided that this NOTICE is retained with the copy.
+
+That grant is limited to that purpose. It conveys no other right in the
+documentation, and no trademark or service-mark rights in "tastytrade",
+"tastyworks", or any related mark.
+
+THE DOCUMENTATION IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. It is a
+copy taken at one point in time and is not the authoritative source. The current
+documentation is published at https://developer.tastytrade.com/.

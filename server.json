@@ -81,7 +81,8 @@
           "TASTYTRADE_API_URL is an explicit base URL for a gateway or a test double and wins over TASTYTRADE_ENV. An unrecognised host in it stops the server unless TASTYTRADE_ALLOW_UNKNOWN_API_HOST names it.",
           "A resources/read is charged the per-endpoint ceilings of the tool reaching the same endpoint, plus the global cap at its declared fan-out."
         ]
-      }
+      },
+      "licence": "MIT for the software (LICENSE). The vendored docs under tastytrade-llms-txt-docs/ are a runtime dependency licensed separately; NOTICE grants the right to redistribute them with this software."
     }
   }
 }
