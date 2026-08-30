@@ -5,17 +5,34 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server for the
 access to quotes, instruments, option chains, balances, positions, transactions,
 watchlists, and order entry.
 
-**This server can place, edit, replace and cancel real orders, and its default
-endpoint is production — real money.** Production is the default because the
-sandbox does not serve market data: a server pointed there cannot quote, and a
-default that cannot do the job is not a safe default. One word switches it,
-`TASTYTRADE_ENV=sandbox`, and `TASTYTRADE_READ_ONLY=1` withholds every write and
-destructive tool. Read [Choosing an environment](#choosing-an-environment) and
-[Safety model](#safety-model) before you point this at an account you care
-about.
+> [!WARNING]
+>
+> **The default endpoint is PRODUCTION. Production is real.**
+>
+> With no environment configured, this server connects to the tastytrade
+> **production** API. Every account the supplied credentials can reach is a
+> **real brokerage account**, and every order this server places, edits,
+> replaces or cancels moves **real money** in it. Those actions take effect
+> immediately and cannot be undone.
+>
+> **For an environment with no real money in it, set `TASTYTRADE_ENV=sandbox`.**
+> **To withhold every write and destructive tool, set `TASTYTRADE_READ_ONLY=1`.**
+>
+> Read [Choosing an environment](#choosing-an-environment) and
+> [Safety model](#safety-model) before you point this at an account you care
+> about, and [Disclaimer](#disclaimer) for what this software does and does not
+> promise.
+
+Production is the default because the sandbox does not serve market data: a
+server pointed there cannot quote, and a default that cannot do the job is not a
+safe default — it is one that teaches an operator to override it without reading
+why. The switch is one word either way, and the environment in use is stated in
+three places: a startup banner on stderr, the `instructions` the MCP client
+receives when it connects, and an `environment` member on every order result.
 
 > No tool, resource, prompt or example here is a recommendation to buy or sell
-> anything. Nothing in this repository is financial advice.
+> anything. Nothing in this repository is financial advice. See
+> [Disclaimer](#disclaimer).
 
 ---
 
@@ -380,6 +397,33 @@ documentation. Four of those files are a **runtime dependency** — the static M
 resources read them at module load — and the rest are the API reference the test
 suite validates the tool schemas against. That material is tastytrade's, not
 covered by this repository's licence, and carries no licence notice of its own.
+
+## Disclaimer
+
+This software is provided **as is, without warranty of any kind**, as set out in
+[LICENSE](LICENSE).
+
+**You are responsible for what you connect this server to, and for everything it
+does on your behalf.** This server hands order entry to an LLM agent. Language
+models are non-deterministic: they misread instructions, act on content injected
+into their context by a third party, and take actions their operator did not
+intend. The dry-run-first confirmation flow, the pre-submit sanity checks and the
+rate limits described above reduce how much damage that can do. They do not
+eliminate it, and nothing in this repository is a guarantee about what a model
+will do with the tools it is given.
+
+Neither tastytrade nor any contributor to this repository accepts responsibility
+or liability for any action taken — or not taken — by an LLM, an MCP client, or
+any other software interacting with this server. That includes any order placed,
+modified or cancelled, any position opened or closed, any account state changed,
+and any financial loss arising from any of it, on any account the configured
+credentials can reach.
+
+If you are not prepared to accept that, run with `TASTYTRADE_ENV=sandbox`, or
+with `TASTYTRADE_READ_ONLY=1`, or do not supply production credentials.
+
+No tool, resource, prompt or example in this repository is a recommendation to
+buy or sell anything, and nothing here is financial advice.
 
 ## Licence
 
