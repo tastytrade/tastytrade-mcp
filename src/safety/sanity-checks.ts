@@ -1376,39 +1376,73 @@ function scaledDecimal(value: unknown): number | null {
 }
 
 /**
- * The increment that applies to `price` under `schedule`, as a scaled integer.
+ * The increment to check a price against, and whether a FAILURE is conclusive.
  *
- * Returns null when the schedule is not an array of readable entries, or when it
- * has no entry that applies — both of which mean "not checked", never "fine".
+ * The two schedules key their thresholds off DIFFERENT prices. This is measured
+ * against the API, not inferred from the wording:
+ *
+ *   `option-tick-sizes` — thresholds compare against the ORDER PRICE (the
+ *     premium). On an option publishing
+ *     [{threshold:"3.0",value:"0.01"},{value:"0.05"}], a $3.01 limit is refused
+ *     with `invalid_price_increment` and $3.05 is accepted, while $0.02 is
+ *     accepted and $0.025 refused. The band is the premium's own, so the order
+ *     price resolves it.
+ *
+ *   `tick-sizes` — thresholds compare against the SECURITY's price, not the
+ *     order's. AAPL publishes [{threshold:"1.0",value:"0.0001"},{value:"0.01"}]
+ *     and refuses a $0.5001 limit. The $0.0001 band belongs to a stock trading
+ *     under a dollar (SEC Rule 612), which AAPL is not — and this server holds no
+ *     quote, so it cannot tell which band a given equity is in.
+ *
+ * Hence `failureIsConclusive`. An equity price below a threshold is UNRESOLVABLE here,
+ * because a genuinely sub-dollar security may legally use the finer increment; a
+ * hard block there would refuse a valid order. A PASS, by contrast, is always
+ * conclusive: the fallback increment is a whole multiple of every finer one in a
+ * published schedule, so a price divisible by the coarse tick is divisible by the
+ * fine one too.
  */
-export function tickForPrice(
+export function resolveTick(
   schedule: unknown,
   scaledPrice: number,
-): number | null {
-  if (!Array.isArray(schedule) || schedule.length === 0) return null;
+  bandedByOrderPrice: boolean,
+): { tick: number | null; failureIsConclusive: boolean } {
+  if (!Array.isArray(schedule) || schedule.length === 0)
+    return { tick: null, failureIsConclusive: false };
 
   let fallback: number | null = null;
   const banded: Array<{ threshold: number; tick: number }> = [];
-
   for (const entry of schedule) {
-    if (entry === null || typeof entry !== "object") return null;
+    if (entry === null || typeof entry !== "object")
+      return { tick: null, failureIsConclusive: false };
     const tick = scaledDecimal((entry as Record<string, unknown>).value);
-    if (tick === null || tick <= 0) return null;
+    if (tick === null || tick <= 0)
+      return { tick: null, failureIsConclusive: false };
     const rawThreshold = (entry as Record<string, unknown>).threshold;
     if (rawThreshold === undefined || rawThreshold === null) {
       fallback = tick;
       continue;
     }
     const threshold = scaledDecimal(rawThreshold);
-    if (threshold === null) return null;
+    if (threshold === null) return { tick: null, failureIsConclusive: false };
     banded.push({ threshold, tick });
   }
-
   banded.sort((a, b) => a.threshold - b.threshold);
-  for (const band of banded) {
-    if (scaledPrice < band.threshold) return band.tick;
+
+  if (bandedByOrderPrice) {
+    for (const band of banded) {
+      if (scaledPrice < band.threshold)
+        return { tick: band.tick, failureIsConclusive: true };
+    }
+    return { tick: fallback, failureIsConclusive: fallback !== null };
   }
-  return fallback;
+
+  // Equity. Only the fallback is knowable from an order price; a price under any
+  // threshold might belong to a security using the finer band.
+  const underABand = banded.some((band) => scaledPrice < band.threshold);
+  return {
+    tick: fallback,
+    failureIsConclusive: fallback !== null && !underABand,
+  };
 }
 
 /** The schedule field an instrument payload publishes for this leg's type. */
@@ -1611,7 +1645,7 @@ export async function runSanityChecks(
   // A live read, like the limits above, and it fails the same way: a price off
   // the increment is a HARD BLOCK, and a schedule that could not be read is
   // named in checks_not_run rather than passed. Narrow by design — see the
-  // note above tickForPrice for why a spread and a futures leg are skipped
+  // note above resolveTick for why a spread and a futures leg are skipped
   // rather than guessed at.
   const scaledPrice = scaledDecimal(
     (args as unknown as Record<string, unknown>).price,
@@ -1648,12 +1682,25 @@ export async function runSanityChecks(
         read = false;
       }
     }
-    const tick = read ? tickForPrice(schedule, scaledPrice) : null;
+    const { tick, failureIsConclusive } = read
+      ? resolveTick(schedule, scaledPrice, tickField === "option-tick-sizes")
+      : { tick: null, failureIsConclusive: false };
     if (tick === null) {
       warnings.push(
         `The price increment for ${describeSymbol(tickLeg.symbol)} could not be ` +
           `read, so this order's price was not checked against a tick ` +
           `schedule — ${SERVER_SIDE_BACKSTOP}`,
+      );
+    } else if (scaledPrice % tick !== 0 && !failureIsConclusive) {
+      // The coarse increment does not divide the price, and a finer band may
+      // legitimately apply to this security — see resolveTick. Blocking here
+      // would refuse a valid order on a sub-dollar stock, so this discloses
+      // instead, and `tick_size` stays out of the `ran` set.
+      warnings.push(
+        `The price increment for ${describeSymbol(tickLeg.symbol)} could not be ` +
+          `resolved below its published threshold, so this order's price was ` +
+          `not checked against a tick schedule — ` +
+          SERVER_SIDE_BACKSTOP,
       );
     } else if (scaledPrice % tick !== 0) {
       throw toolError({

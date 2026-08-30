@@ -18,7 +18,7 @@ import {
   ADVISORY_READ_BUDGET_MS,
   DEFAULT_MAX_ORDER_NOTIONAL_USD,
   ORDER_LEG_INSTRUMENT_TYPES,
-  tickForPrice,
+  resolveTick,
   UNCEILINGED_ORDER_LEG_INSTRUMENT_TYPES,
   type OutboundOrderBody,
 } from "../../src/safety/sanity-checks.js";
@@ -2411,6 +2411,53 @@ describe("runSanityChecks — tick size", () => {
     expect(isToolErrorException(e)).toBe(true);
   });
 
+  it("discloses rather than blocks a sub-dollar equity price off the coarse tick", async () => {
+    // The case the live API taught us. AAPL publishes
+    // [{threshold:"1.0",value:"0.0001"},{value:"0.01"}] and refuses a $0.5001
+    // limit: the $0.0001 band belongs to a security trading under a dollar,
+    // which this server holds no quote to determine. The coarse increment
+    // fails, a finer one might legitimately apply, and blocking would refuse a
+    // valid order on a genuinely sub-dollar stock.
+    const res = await runSanityChecks(
+      makeClient({
+        instrument: {
+          "tick-sizes": [
+            { threshold: "1.0", value: "0.0001" },
+            { value: "0.01" },
+          ],
+        },
+      }),
+      ACCT,
+      { ...equityLeg(1), price: "0.5001" },
+      echoed,
+    );
+    // No throw, and no claim that the price was checked.
+    expect(res.checksNotRun).toContain("tick_size");
+    expect(res.warnings.join(" ")).toMatch(/increment.*could not be resolved/i);
+  });
+
+  it("still blocks when the coarse tick fails and no finer band could apply", async () => {
+    // $1.0001 is at or above every threshold, so $0.01 is the only increment
+    // that can apply and the failure is conclusive. tastytrade refuses this
+    // price too, which is what makes the block correct rather than merely safe.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          instrument: {
+            "tick-sizes": [
+              { threshold: "1.0", value: "0.0001" },
+              { value: "0.01" },
+            ],
+          },
+        }),
+        ACCT,
+        { ...equityLeg(1), price: "1.0001" },
+        echoed,
+      ),
+    );
+    expect(isToolErrorException(e)).toBe(true);
+  });
+
   it("names the check as not run when the instrument read fails", async () => {
     const res = await runSanityChecks(
       makeClient({ instrumentErr: true }),
@@ -2442,52 +2489,144 @@ describe("runSanityChecks — tick size", () => {
   });
 });
 
-describe("tickForPrice", () => {
-  // Scaled integers: the helper works in hundred-millionths so a decimal price
-  // never meets floating-point modulo. 1e8 covers the 0.00005 futures tick.
-  const S = 1e8;
-  const at = (n: number) => Math.round(n * S);
+describe("resolveTick — the two schedules band differently", () => {
+  /**
+   * Every row below was verified against the cert API on 2026-08-30 by
+   * dry-running the price and recording whether tastytrade returned
+   * `invalid_price_increment`. The schedules are AAPL's own, as published.
+   *
+   * The finding this encodes: `option-tick-sizes` bands on the ORDER price, and
+   * `tick-sizes` bands on the SECURITY's price — which this server cannot see.
+   * So an equity price under a threshold is unresolvable, and a failure there
+   * must disclose rather than block.
+   */
+  const EQUITY = [{ threshold: "1.0", value: "0.0001" }, { value: "0.01" }];
+  const OPTION = [{ threshold: "3.0", value: "0.01" }, { value: "0.05" }];
+  const at = (n: number) => Math.round(n * 1e8);
 
-  it("picks the band a price falls below, across several thresholds", () => {
-    // Three bands, deliberately supplied out of order: the helper sorts them,
-    // and with fewer than two banded entries that sort is never exercised.
-    const schedule = [
-      { threshold: "10.0", value: "0.10" },
-      { value: "0.25" },
-      { threshold: "1.0", value: "0.01" },
-      { threshold: "3.0", value: "0.05" },
+  /** What this server concludes: "accept" | "block" | "disclose". */
+  function verdict(schedule: unknown, price: number, byOrderPrice: boolean) {
+    const scaled = at(price);
+    const { tick, failureIsConclusive } = resolveTick(
+      schedule,
+      scaled,
+      byOrderPrice,
+    );
+    if (tick === null) return "disclose";
+    if (scaled % tick === 0) return "accept";
+    return failureIsConclusive ? "block" : "disclose";
+  }
+
+  // Live: tastytrade accepted 0.5000 / 1.00 / 1.01 / 2.5000 and refused
+  // 0.5001 / 0.50005 / 0.9999 / 0.99995 / 1.0001 / 1.001 / 2.5001.
+  it.each([
+    [0.5, "accept"],
+    [1.0, "accept"],
+    [1.01, "accept"],
+    [2.5, "accept"],
+    // Refused live, and conclusively so: at or above every threshold.
+    [1.0001, "block"],
+    [1.001, "block"],
+    [2.5001, "block"],
+    // Refused live, but under the $1 band — a sub-dollar security could legally
+    // price this way, so this server must not block it.
+    [0.5001, "disclose"],
+    [0.50005, "disclose"],
+    [0.9999, "disclose"],
+    [0.99995, "disclose"],
+  ])("equity %p -> %s", (price, expected) => {
+    expect(verdict(EQUITY, price, false)).toBe(expected);
+  });
+
+  // Live: accepted 0.01 / 0.02 / 1.23 / 2.99 / 3.00 / 3.05 / 3.10,
+  // refused 0.025 / 3.01. Every one is conclusive, because the premium IS the band.
+  it.each([
+    [0.01, "accept"],
+    [0.02, "accept"],
+    [1.23, "accept"],
+    [2.99, "accept"],
+    [3.0, "accept"],
+    [3.05, "accept"],
+    [3.1, "accept"],
+    [0.025, "block"],
+    [3.01, "block"],
+  ])("option %p -> %s", (price, expected) => {
+    expect(verdict(OPTION, price, true)).toBe(expected);
+  });
+
+  it("never blocks an equity price a finer band could legitimise", () => {
+    // The property, stated once rather than sampled: below the lowest threshold
+    // there is no conclusive failure, so no hard block is reachable.
+    for (let tenths = 1; tenths < 10000; tenths += 7) {
+      const price = tenths / 10000;
+      if (price >= 1) continue;
+      expect(verdict(EQUITY, price, false)).not.toBe("block");
+    }
+  });
+
+  it("accepts on a coarse-tick pass even where a failure would be inconclusive", () => {
+    // The asymmetry, stated explicitly because it is easy to misread the flag as
+    // "the band was resolved". At $0.50 the band is NOT resolved — a sub-dollar
+    // security could use $0.0001 — so a failure here could not be trusted. But
+    // the price IS a multiple of the coarse $0.01, and every finer increment in a
+    // published schedule divides the coarse one, so the pass holds either way.
+    expect(resolveTick(EQUITY, at(0.5), false).failureIsConclusive).toBe(false);
+    expect(verdict(EQUITY, 0.5, false)).toBe("accept");
+  });
+
+  it("resolves a multi-band schedule regardless of the order it arrives in", () => {
+    // Nothing promises the schedule is sorted, and with a single band the sort
+    // never runs — so a second band is what actually exercises it. Shuffled on
+    // purpose: the same three bands in three orders must give the same answer.
+    const bands = [
+      { threshold: "3.0", value: "0.01" },
+      { threshold: "10.0", value: "0.05" },
+      { value: "0.10" },
     ];
-    expect(tickForPrice(schedule, at(0.5))).toBe(at(0.01));
-    expect(tickForPrice(schedule, at(2.0))).toBe(at(0.05));
-    expect(tickForPrice(schedule, at(5.0))).toBe(at(0.1));
-    // At and above every threshold, the entry carrying none.
-    expect(tickForPrice(schedule, at(50))).toBe(at(0.25));
+    const orders = [
+      bands,
+      [bands[2], bands[1], bands[0]],
+      [bands[1], bands[0], bands[2]],
+    ];
+    for (const schedule of orders) {
+      // Below 3 -> the finest band.
+      expect(resolveTick(schedule, at(1.23), true).tick).toBe(at(0.01));
+      // Between 3 and 10 -> the middle band, which only a correct sort finds.
+      expect(resolveTick(schedule, at(5.05), true).tick).toBe(at(0.05));
+      expect(resolveTick(schedule, at(5.01), true).tick).toBe(at(0.05));
+      // At or above the highest threshold -> the fallback.
+      expect(resolveTick(schedule, at(10.0), true).tick).toBe(at(0.1));
+      expect(resolveTick(schedule, at(25.0), true).tick).toBe(at(0.1));
+    }
   });
 
-  it("treats a threshold as exclusive at its own value", () => {
-    const schedule = [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }];
-    expect(tickForPrice(schedule, at(2.99))).toBe(at(0.05));
-    expect(tickForPrice(schedule, at(3.0))).toBe(at(0.1));
+  it("keeps an equity multi-band schedule inconclusive under its top threshold", () => {
+    // The equity rule does not pick a band at all; it only asks whether some
+    // finer band could apply. With two thresholds that has to hold under BOTH.
+    const schedule = [
+      { threshold: "1.0", value: "0.0001" },
+      { threshold: "5.0", value: "0.001" },
+      { value: "0.01" },
+    ];
+    for (const price of [0.5, 2.5, 4.99]) {
+      expect(resolveTick(schedule, at(price), false).failureIsConclusive).toBe(
+        false,
+      );
+    }
+    expect(resolveTick(schedule, at(5.0), false).failureIsConclusive).toBe(
+      true,
+    );
+    expect(resolveTick(schedule, at(12.34), false).failureIsConclusive).toBe(
+      true,
+    );
   });
 
-  it("returns null for anything it cannot read, rather than guessing", () => {
-    // Every one of these means "not checked". A helper that fell back to a
-    // default increment here would turn an unreadable schedule into a passed
-    // price, which is the failure this whole check exists to prevent.
-    expect(tickForPrice(undefined, at(1))).toBeNull();
-    expect(tickForPrice(null, at(1))).toBeNull();
-    expect(tickForPrice([], at(1))).toBeNull();
-    expect(tickForPrice("0.05", at(1))).toBeNull();
-    expect(tickForPrice([null], at(1))).toBeNull();
-    expect(tickForPrice(["0.05"], at(1))).toBeNull();
-    expect(tickForPrice([{ value: "nope" }], at(1))).toBeNull();
-    expect(tickForPrice([{ value: "0" }], at(1))).toBeNull();
-    expect(tickForPrice([{ value: "-0.05" }], at(1))).toBeNull();
-    expect(tickForPrice([{ threshold: "x", value: "0.05" }], at(1))).toBeNull();
-    // A schedule with only bands and no fallback: nothing applies at or above
-    // the highest threshold.
-    expect(
-      tickForPrice([{ threshold: "3.0", value: "0.05" }], at(4)),
-    ).toBeNull();
+  it("reports an unreadable schedule as unresolvable, not as fine", () => {
+    for (const bad of [undefined, null, [], "0.01", [null], [{ value: "x" }]]) {
+      expect(resolveTick(bad, at(1), false)).toEqual({
+        tick: null,
+        failureIsConclusive: false,
+      });
+    }
   });
 });
