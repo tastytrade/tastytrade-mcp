@@ -18,7 +18,7 @@
         "readOnly": 70,
         "write": 2,
         "destructive": 12,
-        "note": "Twelve destructive tools. Five — place_order, edit_order, replace_order, place_complex_order, edit_complex_order — require a single-use confirmation token from their matching dry_run_* tool, valid 60 seconds and bound to a hash of the arguments. The other seven carry none: the two order cancels and five watchlist/quote-alert mutations."
+        "note": "Twelve destructive tools. Five \u2014 place_order, edit_order, replace_order, place_complex_order, edit_complex_order \u2014 require a single-use confirmation token from their matching dry_run_* tool, valid 60 seconds and bound to a hash of the arguments. The other seven carry none: the two order cancels and five watchlist/quote-alert mutations."
       },
       "install": {
         "note": "Install by cloning and building: no image is published and no npm package, so no docker pull and no npx. A Dockerfile is included for building your own.",
@@ -36,7 +36,7 @@
                 "command": "node",
                 "args": ["/absolute/path/to/tastytrade-mcp/dist/index.js"],
                 "env": {
-                  "TASTYTRADE_ENV": "sandbox",
+                  "TASTYTRADE_ENV": "production",
                   "TASTYTRADE_CLIENT_ID": "your_client_id",
                   "TASTYTRADE_CLIENT_SECRET": "your_client_secret",
                   "TASTYTRADE_REFRESH_TOKEN": "your_refresh_token"
@@ -47,7 +47,7 @@
           "notes": [
             "args must be an absolute path; MCP clients do not resolve ~ or relative paths.",
             "A .env file is NOT auto-loaded. Credentials come from the client's env block, or the launching shell.",
-            "The block above pins the sandbox; production is what you get if you drop it."
+            "The block above names production explicitly \u2014 real funds. Change TASTYTRADE_ENV to sandbox for no real money. An absent variable also means production, so naming it is what keeps the config honest."
           ]
         }
       },
@@ -69,16 +69,16 @@
             "tradingStatus": "1/sec",
             "accounts": "1/sec"
           },
-          "howItApplies": "Every call is charged against the global cap, plus an endpoint's ceiling when it reaches one above. tradingStatus has no tool: the safety layer charges it before every live submit. A tool absent from the table has no per-endpoint ceiling, though the destructive tools also sit behind an unpublished internal cap: a burst of submissions can be refused while the global cap has room. Exhaustion returns a rate_limit_exceeded ToolError carrying retry_after_ms.",
+          "howItApplies": "Every call is charged against the global cap, plus an endpoint ceiling where one applies. tradingStatus has no tool: the safety layer charges it from inside a submit.",
           "planningNote": "A bucket holds one second of budget, so a 1/sec endpoint permits one call and then a full second of waiting. Size polling per endpoint, not per agent, and stream live prices over DXLink."
         },
         "notes": [
           "The endpoint defaults to PRODUCTION (https://api.tastyworks.com): real accounts, real funds. TASTYTRADE_ENV=sandbox selects https://api.cert.tastyworks.com; prod, live, cert, staging and sbx are also understood. A value the server cannot read resolves to the sandbox and warns on stderr.",
           "The sandbox serves no market data (HTTP 502 on every market-data and market-metrics route), which is why production is the default.",
           "Production is announced three ways: a LIVE TRADING stderr banner, the environment named in the initialize instructions, and an environment member (production, sandbox or other) on every order result.",
-          "TASTYTRADE_READ_ONLY: 1 or true withholds and refuses every write and destructive tool; 0, false, empty and unset allow them (case-insensitive, trimmed). Any other value ENABLES read-only mode and warns — a setting that cannot be read is never permission to move money.",
+          "TASTYTRADE_READ_ONLY: 1 or true withholds and refuses every write and destructive tool; 0, false, empty and unset allow them (case-insensitive, trimmed). Any other value ENABLES read-only mode and warns \u2014 a setting that cannot be read is never permission to move money.",
           "MAX_ORDER_NOTIONAL_USD caps single-order buying-power impact; the default is 50000.",
-          "TASTYTRADE_API_URL is an explicit base URL for a gateway or a test double, and it wins over TASTYTRADE_ENV. An unrecognised host in it is a startup refusal, not a warning: the server exits rather than POST the refresh token and client secret there. TASTYTRADE_ALLOW_UNKNOWN_API_HOST=<hostname> acknowledges one by name.",
+          "TASTYTRADE_API_URL is an explicit base URL for a gateway or a test double and wins over TASTYTRADE_ENV. An unrecognised host in it stops the server unless TASTYTRADE_ALLOW_UNKNOWN_API_HOST names it.",
           "A resources/read is charged the per-endpoint ceilings of the tool reaching the same endpoint, plus the global cap at its declared fan-out."
         ]
       }

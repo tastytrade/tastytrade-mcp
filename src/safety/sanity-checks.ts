@@ -1054,8 +1054,16 @@ function assertNoDryRunErrors(dry: DryRunLike): void {
  * The notional cap from the environment. Always enforced: resolveNotionalCap()
  * cannot return a non-positive or non-finite limit, so there is no input to
  * this server that turns this check off.
+ *
+ * Returns whether the cap was actually COMPARED against a figure. Enforcement
+ * being unconditional is not the same claim as the comparison having happened: a
+ * payload carrying no readable change-in-buying-power gets a warning saying so,
+ * and the caller must keep `notional_cap` out of the `ran` set on that path.
+ * Otherwise the warning and `checks_not_run` — both authored here — contradict
+ * each other about a money check, and `checks_not_run` is the one the tool
+ * descriptions call authoritative.
  */
-function applyNotionalCap(dry: DryRunLike, warnings: string[]): void {
+function applyNotionalCap(dry: DryRunLike, warnings: string[]): boolean {
   const cap = resolveNotionalCap();
   if (cap.warning) warnings.push(cap.warning);
   const impact = parseBuyingPowerEffect(dry["buying-power-effect"]);
@@ -1076,7 +1084,12 @@ function applyNotionalCap(dry: DryRunLike, warnings: string[]): void {
       "Dry-run reported no usable change-in-buying-power, so the " +
         "MAX_ORDER_NOTIONAL_USD cap could not be applied to this order.",
     );
+    return false;
   }
+  // A measured zero is a measurement. "Absent" and "zero" must not collapse into
+  // the same answer, which is the whole reason this returns a boolean rather
+  // than the caller re-deriving it from the warning text.
+  return true;
 }
 
 /**
@@ -1323,8 +1336,7 @@ export async function runStoredDryRunChecks(
   ran.add("dry_run_readable");
   assertNoDryRunErrors(dry);
   ran.add("dry_run_errors");
-  applyNotionalCap(dry, warnings);
-  ran.add("notional_cap");
+  if (applyNotionalCap(dry, warnings)) ran.add("notional_cap");
   collectDryRunWarnings(dry, warnings, upstreamNotes);
 
   // The same helper, and the same hard block, place_order runs. `legs` is
@@ -1660,8 +1672,7 @@ export async function runSanityChecks(
 
   // 3. Notional cap from env — the same check, and the same code path, the
   // three legless routes run through runStoredDryRunChecks.
-  applyNotionalCap(dry, warnings);
-  ran.add("notional_cap");
+  if (applyNotionalCap(dry, warnings)) ran.add("notional_cap");
 
   // 4. Surface any dry-run warnings — into the UPSTREAM channel, never into
   // this server's own. See SanityCheckOutcome for why one array with two

@@ -172,6 +172,7 @@ on macOS it sits in `~/Library/Application Support/Claude/`, and on Windows in
       "command": "node",
       "args": ["/absolute/path/to/tastytrade-mcp/dist/index.js"],
       "env": {
+        "TASTYTRADE_ENV": "production",
         "TASTYTRADE_CLIENT_ID": "…",
         "TASTYTRADE_CLIENT_SECRET": "…",
         "TASTYTRADE_REFRESH_TOKEN": "…"
@@ -181,10 +182,11 @@ on macOS it sits in `~/Library/Application Support/Claude/`, and on Windows in
 }
 ```
 
-That block is **production**, because nothing in it selects an environment. Add
-`"TASTYTRADE_ENV": "sandbox"` to the `env` object for the sandbox, and
-`"TASTYTRADE_READ_ONLY": "1"` to withhold every write and destructive tool;
-every value in that object is a string, `"1"` included.
+That block is **production**: real funds, real accounts. The environment is named
+explicitly rather than left to the default, so the block cannot mean something
+different from what it says — change it to `"sandbox"` for an environment with no
+real money in it, and add `"TASTYTRADE_READ_ONLY": "1"` to withhold every write
+and destructive tool. Every value in that object is a string, `"1"` included.
 
 On Windows the path is a JSON string like any other, so each backslash has to be
 doubled:

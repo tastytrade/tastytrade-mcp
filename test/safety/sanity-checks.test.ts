@@ -1743,6 +1743,13 @@ describe("runSanityChecks — soft warnings", () => {
     expect(res.warnings.join(" ")).toMatch(
       /no usable change-in-buying-power.*could not be applied/,
     );
+    // And the id must appear in checksNotRun, because that list — not the
+    // warning prose — is what the tool descriptions call authoritative for
+    // what was NOT verified. A warning saying the cap "could not be applied"
+    // beside a checksNotRun that omits `notional_cap` is two channels this
+    // server authors contradicting each other about a money check, and the
+    // machine-readable one is the one an agent is told to read.
+    expect(res.checksNotRun).toContain("notional_cap");
   });
 
   it("does not warn when the impact is a legitimate zero", async () => {
@@ -1754,6 +1761,10 @@ describe("runSanityChecks — soft warnings", () => {
       { errors: [], "buying-power-effect": { "change-in-buying-power": 0 } },
     );
     expect(res.warnings).toEqual([]);
+    // Zero is a measurement, so the id belongs in `ran`. Without this the
+    // fix above could pass by putting notional_cap in checksNotRun always,
+    // and the list would stop distinguishing "not checked" from "fine".
+    expect(res.checksNotRun).not.toContain("notional_cap");
   });
 });
 

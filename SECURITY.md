@@ -30,8 +30,11 @@ Please redact credentials, account numbers and order IDs from anything you send.
 
 ## In scope
 
-- Anything that causes a money-moving request to be sent without a valid,
-  argument-bound confirmation token from the matching dry-run.
+- Anything that causes one of the five token-gated order routes — place, edit or
+  replace an order, place or edit a complex order — to send a money-moving
+  request without a valid, argument-bound confirmation token from its matching
+  dry-run. The two cancels, the quote-alert delete and the four watchlist
+  mutators carry no token by design; see the README.
 - Any path that sends the refresh token or client secret to a host other than
   the configured, recognised tastytrade endpoint.
 - Any way to make a credential appear in a tool result, an error envelope, a
