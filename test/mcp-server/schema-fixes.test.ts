@@ -1,3 +1,11 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const REPO_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
 /**
  * Schema corrections that nothing else can catch.
  *
@@ -689,5 +697,77 @@ describe("internal metadata tracks its source", () => {
     // And the union type is retained deliberately — narrowing it would reject a
     // shape the broker may still send.
     expect(exp.type).toEqual(["array", "object"]);
+  });
+});
+
+describe("fields the sandbox omits still have to validate", () => {
+  /**
+   * `spread-tick-sizes` arrives from PRODUCTION as an array of {symbol, value}.
+   * It was declared `type: "object"` while its two siblings — `tick-sizes` and
+   * `option-tick-sizes` — already carried the array/object/null union, so every
+   * real futures payload was rejected by a conforming client with
+   * `-32602 … must be object`, and a 404 sailed through because an error
+   * envelope carries no structuredContent to validate.
+   *
+   * The reason no test caught it: the field is ABSENT from all seven contracts in
+   * the recorded cert payload, so the narrow declaration was never exercised.
+   * The fixture now carries the production shape on one contract; this asserts
+   * the declaration is permissive enough for it.
+   */
+  const FUTURES_TOOLS = [
+    "tastytrade_get_futures",
+    "tastytrade_get_future",
+  ] as const;
+
+  /** Locate a property's declared `type` anywhere in a tool's outputSchema. */
+  function declaredType(tool: string, field: string): unknown {
+    let found: unknown;
+    (function walk(node: unknown): void {
+      if (!node || typeof node !== "object") return;
+      if (Array.isArray(node)) {
+        node.forEach(walk);
+        return;
+      }
+      const o = node as Record<string, unknown>;
+      const props = o.properties as
+        Record<string, { type?: unknown }> | undefined;
+      if (props && props[field]) found = props[field].type;
+      Object.values(o).forEach(walk);
+    })(TOOL_METADATA[tool]?.outputSchema);
+    return found;
+  }
+
+  it.each(FUTURES_TOOLS)("%s accepts spread-tick-sizes as an array", (tool) => {
+    const t = declaredType(tool, "spread-tick-sizes");
+    expect(Array.isArray(t)).toBe(true);
+    expect(t as string[]).toContain("array");
+  });
+
+  it.each(FUTURES_TOOLS)(
+    "%s declares the three tick-size fields identically",
+    (tool) => {
+      // They are the same kind of thing from the same payload. Divergence here is
+      // what produced the defect, so the invariant is stated rather than implied.
+      const a = declaredType(tool, "tick-sizes");
+      const b = declaredType(tool, "option-tick-sizes");
+      const c = declaredType(tool, "spread-tick-sizes");
+      expect(b).toEqual(a);
+      expect(c).toEqual(a);
+    },
+  );
+
+  it("the recorded futures payload actually carries spread-tick-sizes", () => {
+    // Without this the assertions above pass against a fixture that never
+    // contains the field — which is precisely the hole that let this ship.
+    const payload = JSON.parse(
+      readFileSync(
+        path.join(REPO_ROOT, "test/e2e/_payloads/tastytrade_get_futures.json"),
+        "utf8",
+      ),
+    ) as { items: Array<Record<string, unknown>> };
+    const carrying = payload.items.filter((i) => "spread-tick-sizes" in i);
+    expect(carrying.length).toBeGreaterThan(0);
+    // And as an ARRAY, which is the shape production sends.
+    expect(Array.isArray(carrying[0]["spread-tick-sizes"])).toBe(true);
   });
 });
