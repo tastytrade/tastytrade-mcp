@@ -211,6 +211,53 @@ describe("buildOrderBody — snake_case → kebab-case", () => {
   });
 });
 
+describe("the docs name the two things production quietly punishes", () => {
+  /**
+   * Both verified against the live production API, and both are the kind of
+   * thing a reader only discovers by being bitten.
+   */
+  it.each([
+    "tastytrade_dry_run_complex_order",
+    "tastytrade_place_complex_order",
+  ])("%s states the OCO Limit+Stop pairing rule", (name) => {
+    // Two Limit orders returns 422 invalid_oco_order_type_combo. Nothing in the
+    // description said so, so the obvious OCO an agent builds is the refused one.
+    const d = TOOL_METADATA[name]?.description ?? "";
+    expect(d).toContain("OCO SHAPE CONSTRAINT");
+    expect(d).toMatch(/invalid_oco_order_type_combo/);
+  });
+
+  it.each([
+    "tastytrade_replace_order",
+    "tastytrade_edit_order",
+    "tastytrade_dry_run_replace_order",
+    "tastytrade_dry_run_edit_order",
+  ])("%s says the new order id is at upstream.id", (name) => {
+    // place_order wraps (upstream.order.id); replace and edit do not
+    // (upstream.id). Reading the wrong one after a cancel-replace leaves a LIVE
+    // order nobody is tracking — which is exactly what happened during the
+    // production run that produced this test.
+    const d = TOOL_METADATA[name]?.description ?? "";
+    expect(d).toContain("WHERE THE NEW ORDER ID IS");
+    expect(d).toContain("upstream.id");
+  });
+
+  it("the asymmetry the note describes is real, not folklore", () => {
+    // If the schemas ever converge, the note becomes wrong and should go.
+    const wrapped = (n: string) =>
+      Object.prototype.hasOwnProperty.call(
+        (
+          TOOL_METADATA[n]?.outputSchema?.properties?.upstream as
+            { properties?: Record<string, unknown> } | undefined
+        )?.properties ?? {},
+        "order",
+      );
+    expect(wrapped("tastytrade_place_order")).toBe(true);
+    expect(wrapped("tastytrade_replace_order")).toBe(false);
+    expect(wrapped("tastytrade_edit_order")).toBe(false);
+  });
+});
+
 describe("the dry-run docs describe the envelope the broker really sends", () => {
   /**
    * A clean dry-run comes back with `upstream` = {order, buying-power-effect,
