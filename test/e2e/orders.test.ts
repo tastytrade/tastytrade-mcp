@@ -752,7 +752,7 @@ const ORDER_BODY = {
   "time-in-force": "Day",
   "order-type": "Limit",
   source: MCP_ORDER_SOURCE,
-  "automated-source": true,
+  "automated-source": false,
   price: "1.02",
   "price-effect": "Debit",
   legs: [
@@ -860,7 +860,7 @@ describe("single order: dry_run_order -> place_order", () => {
       "time-in-force": "Day",
       "order-type": "Market",
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       legs: ORDER_BODY.legs,
     });
   });
@@ -1051,7 +1051,7 @@ describe("single order: dry_run_replace_order -> replace_order", () => {
     "order-type": "Limit",
     "time-in-force": "GTD",
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
     price: "1.05",
     "price-effect": "Debit",
     "stop-trigger": "1.00",
@@ -1169,7 +1169,7 @@ describe("single order: dry_run_edit_order -> edit_order", () => {
    */
   const EDIT_BODY = {
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
     "order-type": "Limit",
     price: "1.10",
     "price-effect": "Credit",
@@ -1394,7 +1394,7 @@ describe("complex order: dry_run_complex_order -> place_complex_order", () => {
   const OCO_BODY = {
     type: "OCO",
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
     orders: [COMPONENT_BODY, { ...COMPONENT_BODY, price: "1.0" }],
   };
 
@@ -1465,7 +1465,7 @@ describe("complex order: dry_run_complex_order -> place_complex_order", () => {
     expect(req.body).toEqual({
       type: "OTOCO",
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       "trigger-order": {
         "order-type": "Limit",
         "time-in-force": "Day",
@@ -1509,7 +1509,7 @@ describe("complex order: dry_run_complex_order -> place_complex_order", () => {
     expect(req.body).toEqual({
       type: "PAIRS",
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       orders: [COMPONENT_BODY],
       "ratio-price-comparator": "gte",
       "ratio-price-threshold": 1.25,
@@ -1940,7 +1940,7 @@ describe("order-source attribution", () => {
         // tests because this is the only place that proves it reaches the WIRE on
         // every route, rather than just the two builders a unit test can import.
         expect((req.body as Record<string, unknown>)["automated-source"]).toBe(
-          true,
+          false,
         );
         expect(JSON.stringify(req.body)).not.toContain(SPOOF);
       }

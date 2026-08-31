@@ -1467,16 +1467,23 @@ function buildDryRunReplaceEditToolDefs(): Tool[] {
  * held as a literal in test/mcp-server/order-translation.test.ts, which makes
  * changing it a deliberate two-sided edit.
  *
- * `automated-source: true` travels with it on the same four builders. orders.md:
- * "Set `automated-source: true` for algorithmically-generated orders. This may
- * affect order handling and REGULATORY REPORTING." Every order this server builds
- * originates from an agent calling a tool — there is no path through it that a
- * human types — so the flag is true for all of them, unconditionally, and setting
- * it is what makes the report match what happened.
+ * `automated-source: false` travels with it on the same four builders.
  *
- * Both are server-side and non-overridable, and for the same reason: an
+ * THIS VALUE IS A COMPLIANCE DECISION, NOT AN ENGINEERING ONE. orders.md says
+ * "Set `automated-source: true` for algorithmically-generated orders. This may
+ * affect order handling and REGULATORY REPORTING." tastytrade compliance directed
+ * `false` on 2026-08-31: the flag triggers additional reporting and auditing whose
+ * regulatory treatment is unsettled, and tastytrade's standing position is to
+ * report `false` pending guidance to the contrary. Two further points were made:
+ * an operator has to grant the connected agent permission explicitly, and no
+ * pushback has been received on that position.
+ *
+ * Do not change this value on engineering judgement. If the guidance moves, it is
+ * one literal per builder and the tests below pin it on both sides.
+ *
+ * Both fields are server-side and non-overridable, for the same reason: an
  * attribution a caller can forge is not an attribution, and a regulatory
- * attribute a caller can switch off is not an attribute. Neither `source` nor
+ * attribute a caller can switch is not an attribute. Neither `source` nor
  * `automated_source` is an input property on any tool.
  *
  * buildComplexEditBody stays unstamped, deliberately. orders.md enumerates that
@@ -1496,7 +1503,7 @@ function buildReplaceBody(args: any): Record<string, unknown> {
     "order-type": args.order_type,
     "time-in-force": args.time_in_force,
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
   };
   if (args.price !== undefined) {
     body.price = args.price;
@@ -1521,7 +1528,7 @@ function buildEditBody(args: any): Record<string, unknown> {
   // complex-order counterpart is not — see MCP_ORDER_SOURCE.
   const body: Record<string, unknown> = {
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
   };
   // The /orders/{id}/dry-run endpoint re-validates the whole order, so it
   // requires order-type + time-in-force even for a price-only edit.
@@ -1746,7 +1753,7 @@ export function buildComplexOrderBody(args: any): Record<string, unknown> {
   const body: Record<string, unknown> = { type: args.type };
   // Server-controlled attribution; overrides anything the client sent.
   body.source = MCP_ORDER_SOURCE;
-  body["automated-source"] = true;
+  body["automated-source"] = false;
   if (args.trigger_order !== undefined) {
     body["trigger-order"] = buildComponentOrderBody(args.trigger_order);
   }
@@ -2663,7 +2670,7 @@ export function buildOrderBody(args: any): OutboundOrderBody {
     "time-in-force": args.time_in_force,
     "order-type": args.order_type,
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
     ...(args.price && { price: args.price, "price-effect": args.price_effect }),
     ...(args.stop_trigger && { "stop-trigger": args.stop_trigger }),
     legs: (args.legs ?? []).map((leg: any) => ({

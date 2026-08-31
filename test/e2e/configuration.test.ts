@@ -775,7 +775,7 @@ describe("dry-run previews stay available in read-only mode", () => {
       "order-type": "Limit",
       "time-in-force": "Day",
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       price: "1.50",
       "price-effect": "Debit",
       legs: [
