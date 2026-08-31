@@ -92,6 +92,24 @@
         {
           "value": "0.25"
         }
+      ],
+      "spread-tick-sizes": [
+        {
+          "symbol": "/ESZ6",
+          "value": "0.05"
+        },
+        {
+          "symbol": "/ESU7",
+          "value": "0.05"
+        },
+        {
+          "symbol": "/ESH7",
+          "value": "0.05"
+        },
+        {
+          "symbol": "/ESM7",
+          "value": "0.05"
+        }
       ]
     },
     {

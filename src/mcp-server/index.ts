@@ -1325,7 +1325,8 @@ function buildCustomerOrderToolDefs(): Tool[] {
       name: "tastytrade_search_customer_orders",
       description:
         "Customer-level order search at GET /customers/me/orders. " +
-        "Same filters as tastytrade_search_orders plus account_numbers[] to scope across the customer's accounts. " +
+        "Same filters as tastytrade_search_orders. account_numbers[] is REQUIRED " +
+        "— the endpoint refuses a request without it. " +
         "The customer is always the authenticated one — there is no customer_id argument.",
       inputSchema: {
         type: "object",
@@ -1333,10 +1334,14 @@ function buildCustomerOrderToolDefs(): Tool[] {
           account_numbers: {
             type: "array",
             items: { type: "string" },
-            description: "Optional: scope to specific account numbers.",
+            description:
+              "Account numbers to search. REQUIRED: the endpoint refuses a request " +
+              "without it (400, domain account-numbers), so there is no " +
+              "search-every-account form. Read the list from tastytrade_get_accounts.",
           },
           ...ORDER_SEARCH_PROPERTIES,
         },
+        required: ["account_numbers"],
       },
     },
     {
@@ -1351,9 +1356,13 @@ function buildCustomerOrderToolDefs(): Tool[] {
           account_numbers: {
             type: "array",
             items: { type: "string" },
-            description: "Optional: scope to specific account numbers.",
+            description:
+              "Account numbers to search. REQUIRED: the endpoint refuses a request " +
+              "without it (400, domain account-numbers), so there is no " +
+              "search-every-account form. Read the list from tastytrade_get_accounts.",
           },
         },
+        required: ["account_numbers"],
       },
     },
   ];
