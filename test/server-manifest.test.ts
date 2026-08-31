@@ -27,6 +27,7 @@ import {
   TastytradeMCPServer,
 } from "../src/mcp-server/index.js";
 import { accessClassFor } from "../src/mcp-server/annotations.js";
+import { apiEnvironmentOf, resolveApiUrl } from "../src/mcp-server/index.js";
 import { REQUIRED_DOCS } from "../src/resources/static/vendored-docs.js";
 
 const REPO_ROOT = path.resolve(
@@ -246,11 +247,39 @@ describe("the two paste-ready configs cannot disagree", () => {
     expect(readmeEnvValues().length).toBeGreaterThan(0);
   });
 
-  it("selects the SAME environment in both", () => {
+  /** The uncommented TASTYTRADE_ENV assignment in .env.sample, if any. */
+  function envSampleValue(): string | undefined {
+    for (const line of read(".env.sample").split("\n")) {
+      const m = /^TASTYTRADE_ENV=(.*)$/.exec(line.trim());
+      if (m) return m[1].trim();
+    }
+    return undefined;
+  }
+
+  it("selects the SAME environment in all THREE paste-ready artifacts", () => {
+    // README.md, server.json and .env.sample are each a block somebody copies.
+    // A reader meets ONE of them, so if they disagree, some fraction of users
+    // land in an environment the documentation did not promise — and on this
+    // server the two environments differ by whether orders spend real money.
+    //
+    // This test previously compared only the first two. .env.sample shipped
+    // `TASTYTRADE_ENV=sandbox` while both others named production, and an agent
+    // that copied the sample reported the server had "defaulted to sandbox" —
+    // correctly, for the file it had been handed.
     const fromManifest = manifestEnv().TASTYTRADE_ENV;
     for (const value of readmeEnvValues()) {
       expect(value).toBe(fromManifest);
     }
+    expect(envSampleValue()).toBe(fromManifest);
+  });
+
+  it("does not let .env.sample contradict the resolver's own default", () => {
+    // Stronger than agreement between documents: what the sample names must be
+    // what an unconfigured server actually does. Read from the resolver rather
+    // than restated, so this cannot drift if the default moves again.
+    const sample = envSampleValue();
+    expect(sample).toBeDefined();
+    expect(apiEnvironmentOf(resolveApiUrl({}))).toBe(sample);
   });
 
   it("selects an environment the server can actually read", () => {
