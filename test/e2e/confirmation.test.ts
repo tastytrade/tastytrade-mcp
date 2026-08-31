@@ -145,7 +145,7 @@ const EXPECTED_ORDER_BODY = {
   "time-in-force": "Day",
   "order-type": "Limit",
   source: MCP_ORDER_SOURCE,
-  "automated-source": true,
+  "automated-source": false,
   price: "1.02",
   "price-effect": "Debit",
   legs: [
@@ -1121,7 +1121,7 @@ describe("args binding: any change to the order invalidates the token", () => {
     expect(patched.url).toBe(ORDER_BY_ID_URL);
     expect(patched.body).toEqual({
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       "order-type": "Limit",
       price: "1.02",
       "price-effect": "Debit",
@@ -1640,7 +1640,7 @@ describe("complex orders", () => {
   const EXPECTED_COMPLEX_BODY = {
     type: "OTOCO",
     source: MCP_ORDER_SOURCE,
-    "automated-source": true,
+    "automated-source": false,
     "trigger-order": {
       "order-type": "Limit",
       "time-in-force": "Day",

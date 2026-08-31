@@ -404,7 +404,7 @@ describe("prototype pollution through the translation seam", () => {
       "time-in-force": "Day",
       "order-type": "Limit",
       source: MCP_ORDER_SOURCE,
-      "automated-source": true,
+      "automated-source": false,
       price: "1.00",
       "price-effect": "Debit",
       legs: [
