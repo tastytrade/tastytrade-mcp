@@ -1,0 +1,130 @@
+name: Dependency audit
+
+# WHY THIS EXISTS, SEPARATELY FROM ci.yml
+#
+# build.sh stage 7 already fails on a HIGH/CRITICAL advisory, and ci.yml runs it
+# on every pull request and every push to main. That catches a bad dependency the
+# moment someone ADDS one. It does not catch the other way an advisory arrives:
+# the tree does not change, the advisory database does.
+#
+# That is not hypothetical. A fast-uri HIGH (GHSA-5jgf-p345-68v8 and three
+# siblings) landed against a version already in the lockfile. main had last run
+# CI four days earlier and was green, so nothing went red and nobody was told.
+# The next pull request — a README edit that touched no code at all — inherited a
+# failing required check, and its author had to diagnose a supply-chain advisory
+# to land a documentation change. Meanwhile the server shipped with the advisory
+# for four days.
+#
+# A scheduled audit converts that from "discovered by whoever opens the next pull
+# request" into "reported the morning it publishes".
+on:
+  schedule:
+    # 06:17 UTC daily. Deliberately not on the hour: GitHub queues the whole
+    # platform's on-the-hour cron at once, and a job scheduled at :00 can sit for
+    # tens of minutes. Nothing here is time-critical, but a predictable start
+    # makes "did last night's audit run?" answerable at a glance.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+# The audit itself only reads the tree. `issues: write` is what lets the failure
+# path file a report — without it a red advisory is just a red dot on a tab that
+# nobody has open, which is the exact failure this workflow exists to fix.
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: dependency-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: npm audit (no HIGH / CRITICAL)
+    # GitHub-hosted on purpose. This job installs nothing and builds nothing, so
+    # it has no use for the self-hosted pool's sticky disks, and keeping it off
+    # that pool means a nightly cron can never contend with a human waiting on a
+    # pull request.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+
+      # `--package-lock-only` audits the committed lockfile directly: no `npm ci`,
+      # so no dependency install script executes. That matters more here than in
+      # build.sh. This job holds `issues: write`, and running third-party install
+      # scripts in a job that can write to the repository is a bigger surface than
+      # the audit is worth. It is also the difference between seconds and minutes.
+      #
+      # It reports the same set as build.sh's post-install `npm audit` — verified
+      # against this repository's own lockfile, on the fast-uri advisory above.
+      #
+      # `--audit-level=high` mirrors build.sh's threshold exactly. If one moves,
+      # move the other, or the nightly and the gate disagree about what "clean"
+      # means and the nightly stops being a preview of the gate.
+      - name: Audit
+        id: audit
+        run: |
+          set -uo pipefail
+          npm audit --package-lock-only --audit-level=high > audit.txt 2>&1
+          status=$?
+          # Keep the report whatever happens: the issue body below quotes it, and
+          # on a pass it is the evidence the run actually inspected something.
+          {
+            echo 'report<<AUDIT_EOF'
+            cat audit.txt
+            echo 'AUDIT_EOF'
+          } >> "$GITHUB_OUTPUT"
+          cat audit.txt
+          exit $status
+
+      # Only on failure, and only if an open report is not already sitting there —
+      # a nightly cron that files a fresh issue every morning trains people to
+      # ignore the label.
+      # Only on failure, and only if an open report is not already sitting there —
+      # a nightly cron that files a fresh issue every morning trains people to
+      # ignore the label.
+      - name: Open or update the advisory report
+        if: failure() && steps.audit.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: "Dependency audit: HIGH/CRITICAL advisory on main"
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Built with printf into a file rather than an inline heredoc: a heredoc
+          # nested inside a YAML block scalar has to keep its terminator at column
+          # zero, which fights the indentation and silently swallows the rest of
+          # the script when it drifts.
+          {
+            printf '%s\n' "The nightly dependency audit found a HIGH or CRITICAL advisory against \`main\`."
+            printf '%s\n\n' "**\`build.sh\` stage 7 is a required check, so until this is cleared no pull request can merge** - including ones that touch no code."
+            printf 'Run: %s\n\n' "$RUN_URL"
+            printf '```\n'
+            cat audit.txt
+            printf '```\n\n'
+            printf '%s\n' "Dependabot usually has a bump open already; check the pull request list before hand-editing the lockfile. This issue is updated, not duplicated, on subsequent nights."
+          } > issue-body.md
+
+          # Exact-match on the title client-side. Passing a title containing a
+          # colon to --search invites the search parser to read it as a
+          # qualifier, and a false "no match" here means a duplicate issue every
+          # single night.
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+                       --jq "[.[] | select(.title == \"$TITLE\")] | .[0].number // empty")
+
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file issue-body.md
+            echo "commented on existing issue #$existing"
+          else
+            gh issue create --title "$TITLE" --body-file issue-body.md --label dependencies \
+              || gh issue create --title "$TITLE" --body-file issue-body.md
+          fi
