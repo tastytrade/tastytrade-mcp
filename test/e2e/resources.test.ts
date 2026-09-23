@@ -1167,7 +1167,7 @@ describe("resources/read: market session and holidays", () => {
     expect(h.lastRequest()).toMatchObject({
       method: "GET",
       url: "/market-time/sessions/current",
-      params: { "instrument-collections": ["Equity", "CME", "CFE"] },
+      params: { "instrument-collections[]": ["Equity", "CME", "CFE"] },
     });
   });
 

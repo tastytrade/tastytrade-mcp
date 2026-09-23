@@ -285,6 +285,25 @@ const PINNED: ReadonlyArray<
       }),
     "symbol=AAPL&symbol=MSFT&include-marks=true",
   ],
+  // The ARRAY filter on the same endpoint, and the reason the two are pinned
+  // side by side: measured against production 2026-09-21, `underlying-symbol`
+  // REQUIRES the bracket (the bare repeated key returned the last symbol's rows
+  // alone, with a 200) and `symbol` above REFUSES it with a 400. Per parameter,
+  // on the API's authority — not per endpoint and not per value shape.
+  [
+    "getPositions with an underlying-symbol array",
+    (c) =>
+      c.getPositions("5WX00001", {
+        "underlying-symbol": ["MDB", "AMAT"],
+        "include-marks": true,
+      }),
+    "underlying-symbol%5B%5D=MDB&underlying-symbol%5B%5D=AMAT&include-marks=true",
+  ],
+  [
+    "getPositions with a single underlying-symbol string",
+    (c) => c.getPositions("5WX00001", { "underlying-symbol": "MDB" }),
+    "underlying-symbol=MDB",
+  ],
   [
     "getQuote",
     (c) =>
@@ -325,9 +344,13 @@ const PINNED: ReadonlyArray<
   [
     "getCryptocurrencies",
     (c) => c.getCryptocurrencies({ symbol: ["BTC/USD", "ETH/USD"] }),
-    "symbol=BTC%2FUSD&symbol=ETH%2FUSD",
+    "symbol%5B%5D=BTC%2FUSD&symbol%5B%5D=ETH%2FUSD",
   ],
-  ["getWarrants", (c) => c.getWarrants({ symbol: ["ABC"] }), "symbol=ABC"],
+  [
+    "getWarrants",
+    (c) => c.getWarrants({ symbol: ["ABC"] }),
+    "symbol%5B%5D=ABC",
+  ],
   [
     "getTransactions",
     (c) =>
@@ -349,7 +372,7 @@ const PINNED: ReadonlyArray<
   [
     "getCurrentSessionsMulti",
     (c) => c.getCurrentSessionsMulti(["CME", "Equity"]),
-    "instrument-collections=CME&instrument-collections=Equity",
+    "instrument-collections%5B%5D=CME&instrument-collections%5B%5D=Equity",
   ],
   // And the three that were already on the default, so the consolidation cannot
   // change them either.

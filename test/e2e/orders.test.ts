@@ -477,7 +477,9 @@ describe("positions: tastytrade_get_positions / tastytrade_get_position", () => 
     const req = requestFor(h, "GET", `/accounts/${ACCT}/positions`);
     expect(req.params).toEqual({
       symbol: "AAPL",
-      "underlying-symbol": ["AAPL", "SPY"],
+      // The array filter carries the bracket; the scalar `symbol` above must
+      // NOT (production answers 400 to `symbol[]` on this endpoint).
+      "underlying-symbol[]": ["AAPL", "SPY"],
       "instrument-type": "Equity Option",
       "include-closed-positions": false,
       "include-marks": true,

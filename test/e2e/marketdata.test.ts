@@ -838,10 +838,12 @@ describe("market sessions: tastytrade_get_market_session", () => {
     const req = h.lastRequest()!;
     expect(req.method).toBe("GET");
     expect(req.url).toBe("/market-time/sessions/current");
-    // Serialized by the client as repeated `instrument-collections=` keys; the
-    // params object the adapter records is the pre-serialization array.
+    // Serialized by the client as repeated `instrument-collections[]=` keys;
+    // the params object the adapter records is the pre-serialization array.
+    // The bracket is measured, not cosmetic: the bare repeated key returned
+    // the last collection alone with a 200.
     expect(req.params).toEqual({
-      "instrument-collections": ["Equity", "CME"],
+      "instrument-collections[]": ["Equity", "CME"],
     });
     expect(snakeCaseKeys(req.params)).toEqual([]);
     expect(sessions).toEqual(payload);
@@ -1039,7 +1041,7 @@ describe("market-time enums hold on every branch", () => {
 
     expect(h.lastRequest()!.url).toBe("/market-time/sessions/current");
     expect(h.lastRequest()!.params).toEqual({
-      "instrument-collections": ["CME", "Equity"],
+      "instrument-collections[]": ["CME", "Equity"],
     });
   });
 

@@ -964,9 +964,11 @@ describe("cryptocurrencies", () => {
       symbol: ["BTC/USD", "ETH/USD"],
     });
 
-    // Repeated `symbol=` params; the harness records the pre-serialized array.
+    // Repeated `symbol[]=` params; the harness records the pre-serialized
+    // array. The bracket is measured: without it production answered 200 with
+    // the LAST symbol's instrument alone.
     expect(outbound(harness).params).toEqual({
-      symbol: ["BTC/USD", "ETH/USD"],
+      "symbol[]": ["BTC/USD", "ETH/USD"],
     });
   });
 
@@ -1046,7 +1048,7 @@ describe("warrants", () => {
     const req = outbound(harness);
     expect(req.method).toBe("GET");
     expect(req.url).toBe("/instruments/warrants");
-    expect(req.params).toEqual({ symbol: ["RGTIW"] });
+    expect(req.params).toEqual({ "symbol[]": ["RGTIW"] });
     expect(snakeCaseKeys(req.params)).toEqual([]);
     expect(result).toEqual([warrant]);
   });

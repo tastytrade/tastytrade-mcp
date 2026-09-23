@@ -1034,6 +1034,40 @@ export function serializeParams(
   return search.toString().replace(/%2C/gi, ",");
 }
 
+/**
+ * Rewrite an ARRAY-valued filter to its `key[]` wire form.
+ *
+ * tastytrade's parameter parser reads a repeated BARE key as LAST-ONE-WINS, so
+ * `underlying-symbol=MDB&underlying-symbol=AMAT` answered 200 with the AMAT
+ * rows alone — a SUBSET returned as the whole answer, which is the one failure
+ * shape no caller can see. Measured against production 2026-09-21:
+ *
+ *   /accounts/{n}/positions?underlying-symbol=MDB&underlying-symbol=AMAT  -> AMAT only
+ *   /accounts/{n}/positions?underlying-symbol[]=MDB&…[]=AMAT              -> both
+ *   /market-time/sessions/current?instrument-collections=CME&…=Equity     -> Equity only
+ *   /instruments/cryptocurrencies?symbol=BTC/USD&symbol=ETH/USD           -> ETH/USD only
+ *
+ * PER PARAMETER, never per endpoint, and never a blanket rule over every array:
+ * the SCALAR params measured the same day REFUSE the bracket with HTTP 400 —
+ * `symbol` on positions, `exchange` on /instruments/futures, `lendability` on
+ * /instruments/equities/active. `symbol` is bracketed on /instruments/equities
+ * and refused on /accounts/{n}/positions: the same word, a different arity, on
+ * the API's authority rather than on the shape of the value.
+ */
+function bracketArrayFilters(
+  params: Record<string, unknown>,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  // Rebuilt in the caller's key order rather than delete-and-reappend: a
+  // rename must change one key's SPELLING and nothing else about the request.
+  for (const [key, value] of Object.entries(params)) {
+    const rename = keys.includes(key) && Array.isArray(value);
+    out[rename ? `${key}[]` : key] = value;
+  }
+  return out;
+}
+
 /** The refusal a non-scalar query value gets, before any request is built. */
 function refuseQueryValue(name: string, which: string): never {
   throw toolError({
@@ -1535,11 +1569,13 @@ export class TastytradeClient {
    * false) because agents almost always want mark prices for dashboards.
    * This is a documented breaking change vs. the prior default.
    *
-   * `underlying-symbol` is an array filter, serialized as a REPEATED BARE key
-   * (`underlying-symbol=AAPL&underlying-symbol=SPY`) — not with a `[]` suffix.
-   * open-api-spec/balances-and-positions.md documents the bare form
-   * (`underlying-symbol=AAPL`), which is what the serializer below emits.
-   * Contrast the orders endpoints, whose docs do show `status[]=…`.
+   * `underlying-symbol` is the one ARRAY filter here and goes on the wire as
+   * `underlying-symbol[]=AAPL&underlying-symbol[]=SPY` — see
+   * bracketArrayFilters for the measurement. The docs show only the
+   * single-value form (`underlying-symbol=AAPL`), which is why the bare
+   * repeated key looked right and returned a silent subset instead.
+   * `symbol` on this endpoint is SCALAR and answers 400 to a bracket, so the
+   * rewrite is named per parameter rather than applied to every array.
    */
   async getPositions(accountNumber: string, params?: Record<string, unknown>) {
     const response = await this.client.get(
@@ -1549,7 +1585,7 @@ export class TastytradeClient {
         "/positions",
       ]),
       {
-        params: params ?? {},
+        params: bracketArrayFilters(params ?? {}, ["underlying-symbol"]),
       },
     );
     return envelopeItemsOrBody(response);
@@ -2182,7 +2218,7 @@ export class TastytradeClient {
 
   async getCryptocurrencies(params?: { symbol?: string | string[] }) {
     const response = await this.client.get("/instruments/cryptocurrencies", {
-      params: params ?? {},
+      params: bracketArrayFilters(params ?? {}, ["symbol"]),
     });
     return envelopeItemsOrBody(response);
   }
@@ -2196,7 +2232,7 @@ export class TastytradeClient {
 
   async getWarrants(params?: { symbol?: string | string[] }) {
     const response = await this.client.get("/instruments/warrants", {
-      params: params ?? {},
+      params: bracketArrayFilters(params ?? {}, ["symbol"]),
     });
     return envelopeItemsOrBody(response);
   }
@@ -2610,12 +2646,14 @@ export class TastytradeClient {
 
   /**
    * GET /market-time/sessions/current — multi-collection current snapshot.
-   * `collections` serializes as repeated `instrument-collections[]=…`.
+   * `collections` serializes as repeated `instrument-collections[]=…` — the
+   * bracket is load-bearing, not decoration: the bare repeated key returned
+   * the LAST collection alone with a 200 (see bracketArrayFilters).
    * Per docs values are CFE / CME / Equity (no Zero Hash CLOB here).
    */
   async getCurrentSessionsMulti(collections: Array<"CFE" | "CME" | "Equity">) {
     const response = await this.client.get("/market-time/sessions/current", {
-      params: { "instrument-collections": collections },
+      params: { "instrument-collections[]": collections },
     });
     return envelopeDataOrBody(response);
   }
