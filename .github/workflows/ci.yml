@@ -70,7 +70,7 @@ jobs:
       # local development on one source of truth instead of hardcoding the
       # version in a second place that then drifts.
       - name: Set up Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
           cache: npm
@@ -165,7 +165,7 @@ jobs:
       # Pinned by commit SHA, not by major tag, with no exceptions: the
       # repository rejects a tag-pinned action at runtime.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       # Sticky-disk buildkitd builder. `nofallback` follows the same condition as
       # `runs-on`: on the self-hosted pool a failed builder setup must fail the
@@ -173,7 +173,7 @@ jobs:
       # builder cannot exist, and there falling back to the local builder is the
       # only correct behaviour.
       - name: Set up Buildx
-        uses: useblacksmith/setup-docker-builder@a5256a73e30f09e37e3eceb8ca36043d17621d24 # v2.1.0
+        uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2.2.0
         with:
           platforms: linux/amd64,linux/arm64
           # Required from v2. Names the sticky disk this repository's
