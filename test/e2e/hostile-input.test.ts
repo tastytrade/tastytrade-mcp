@@ -21,7 +21,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
 import { createHarness, callOk, callError, type Harness } from "./harness.js";
-import { TastytradeClient } from "../../src/api-client.js";
+import {
+  TastytradeClient,
+  DEFAULT_ORDER_SEARCH_DAYS,
+} from "../../src/api-client.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import {
   _resetTokensForTest,
@@ -280,6 +283,13 @@ async function dryRun(args: Record<string, unknown>): Promise<string | null> {
 // 1. Prototype pollution through the translation seam
 // ===========================================================================
 
+/** The start-date the client gives an order search that names no start. */
+function defaultStartDate(): string {
+  return new Date(Date.now() - DEFAULT_ORDER_SEARCH_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+}
+
 describe("prototype pollution through the translation seam", () => {
   /**
    * The structural reason this whole class of attack fails: every builder writes
@@ -457,7 +467,11 @@ describe("prototype pollution through the translation seam", () => {
       ),
     );
     expect(res.isError).toBe(false);
-    expect(h.lastRequest()!.params).toEqual({ "underlying-symbol": "AAPL" });
+    // Only the client's own default start-date joins the agent's one filter.
+    expect(h.lastRequest()!.params).toEqual({
+      "underlying-symbol": "AAPL",
+      "start-date": defaultStartDate(),
+    });
     expectNoPrototypePollution();
   });
 
@@ -884,6 +898,7 @@ describe("type confusion between the declared schema and what arrives", () => {
     // the wire regardless, so this is a correctly encoded request, not a
     // coercion the server invented.
     expect(h.lastRequest()!.params).toEqual({
+      "start-date": defaultStartDate(),
       "per-page": "50",
       "page-offset": "0",
     });

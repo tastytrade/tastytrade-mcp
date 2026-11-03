@@ -649,6 +649,49 @@ function envelopeDataOrBody(response: AxiosResponse): any {
 }
 
 /**
+ * order-api's API version 20261012 requires `start-date` or `start-at` on order
+ * searches (400 without one). When the caller sends neither, search this many
+ * days back. The server sends today's date as Accept-Version, so it has been
+ * on 20261012 since that version mounted on 2026-10-12.
+ */
+export const DEFAULT_ORDER_SEARCH_DAYS = 30;
+
+/** Largest `per-page` order-api accepts on `/orders/live`. */
+const LIVE_ORDERS_PER_PAGE = 200;
+
+/** Most `/orders/live` pages fetched before refusing (10,000 orders). */
+const MAX_LIVE_ORDER_PAGES = 50;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Order-search params with a default start added, unless they already carry a
+ * non-null `start-date` or `start-at`. The start is DEFAULT_ORDER_SEARCH_DAYS
+ * before the end the caller gave: `start-at` from `end-at` (order-api ignores
+ * `end-at` once `start-date` is present), else `start-date` from `end-date`,
+ * else from today (UTC).
+ */
+export function withDefaultOrderSearchStart(
+  params?: Record<string, unknown>,
+): Record<string, unknown> {
+  const out = { ...(params ?? {}) };
+  const given = (key: string) => out[key] !== undefined && out[key] !== null;
+  if (given("start-date") || given("start-at")) return out;
+  const window = DEFAULT_ORDER_SEARCH_DAYS * DAY_MS;
+  const endAt = given("end-at") ? Date.parse(String(out["end-at"])) : NaN;
+  if (!Number.isNaN(endAt)) {
+    out["start-at"] = new Date(endAt - window).toISOString();
+    return out;
+  }
+  const endDate = given("end-date")
+    ? Date.parse(`${String(out["end-date"])}T00:00:00Z`)
+    : NaN;
+  const end = Number.isNaN(endDate) ? Date.now() : endDate;
+  out["start-date"] = new Date(end - window).toISOString().slice(0, 10);
+  return out;
+}
+
+/**
  * The entity a state-changing 2xx is REQUIRED to carry, or a refusal.
  *
  * `assertReadableResponse` has already turned away any 2xx with no `data` member,
@@ -1726,7 +1769,7 @@ export class TastytradeClient {
     const response = await this.client.get(
       apiPath(["/accounts/", seg("account_number", accountNumber), "/orders"]),
       {
-        params: params ?? {},
+        params: withDefaultOrderSearchStart(params),
       },
     );
     return envelopeItemsOrBody(response);
@@ -1749,7 +1792,7 @@ export class TastytradeClient {
     const response = await this.client.get(
       apiPath(["/customers/", seg("customer_id", customerId), "/orders"]),
       {
-        params: params ?? {},
+        params: withDefaultOrderSearchStart(params),
       },
     );
     return envelopeItemsOrBody(response);
@@ -1764,13 +1807,10 @@ export class TastytradeClient {
     customerId: string,
     params?: Record<string, unknown>,
   ) {
-    const response = await this.client.get(
+    return this.getAllLiveOrderPages(
       apiPath(["/customers/", seg("customer_id", customerId), "/orders/live"]),
-      {
-        params: params ?? {},
-      },
+      params ?? {},
     );
-    return envelopeItemsOrBody(response);
   }
 
   async getOrder(accountNumber: string, orderId: string) {
@@ -1786,14 +1826,69 @@ export class TastytradeClient {
   }
 
   async getLiveOrders(accountNumber: string) {
-    const response = await this.client.get(
+    return this.getAllLiveOrderPages(
       apiPath([
         "/accounts/",
         seg("account_number", accountNumber),
         "/orders/live",
       ]),
+      {},
     );
-    return envelopeItems(response);
+  }
+
+  /**
+   * Every page of an `/orders/live` list at LIVE_ORDERS_PER_PAGE, concatenated,
+   * so callers keep getting the complete list while each upstream response
+   * stays bounded. A response without `pagination` is the only page; an empty
+   * page ends the walk early.
+   *
+   * This is the reconciliation read after an in-doubt write, so it never
+   * returns a partial or silently emptied list: a page without an items array,
+   * or more than MAX_LIVE_ORDER_PAGES pages, is an upstream_error. Items are
+   * deduped by `id`, because an order placed mid-walk shifts every row down one
+   * and repeats a row across the page boundary.
+   */
+  private async getAllLiveOrderPages(
+    path: string,
+    params: Record<string, unknown>,
+  ): Promise<unknown[]> {
+    const items: unknown[] = [];
+    const seen = new Set<string>();
+    for (let pageOffset = 0; pageOffset < MAX_LIVE_ORDER_PAGES; pageOffset++) {
+      const response = await this.client.get(path, {
+        params: {
+          ...params,
+          "per-page": LIVE_ORDERS_PER_PAGE,
+          "page-offset": pageOffset,
+        },
+      });
+      const page = envelopeItems(response);
+      if (!Array.isArray(page)) {
+        throw toolError({
+          code: "upstream_error",
+          message: `The tastytrade API answered page ${pageOffset} of ${path} without an items array, so the live orders could not be read. No state was changed.`,
+          retryable: false,
+        });
+      }
+      if (page.length === 0) return items;
+      for (const item of page) {
+        const id = (item as { id?: unknown } | null)?.id;
+        if (id !== undefined && id !== null) {
+          if (seen.has(String(id))) continue;
+          seen.add(String(id));
+        }
+        items.push(item);
+      }
+      const totalPages = Number(response.data?.pagination?.["total-pages"]);
+      if (!Number.isFinite(totalPages) || pageOffset + 1 >= totalPages) {
+        return items;
+      }
+    }
+    throw toolError({
+      code: "upstream_error",
+      message: `${path} has more than ${MAX_LIVE_ORDER_PAGES} pages of live orders; refusing to return a partial list. No state was changed.`,
+      retryable: false,
+    });
   }
 
   async placeOrder(accountNumber: string, orderData: any) {
