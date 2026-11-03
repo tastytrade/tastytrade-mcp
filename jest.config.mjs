@@ -119,11 +119,11 @@ export default {
     // uncovered mass at once: twelve near-duplicate query serializers were
     // consolidated into one, and path construction went from a two-branch
     // helper to one constructor with a case per refusal.
-    // Achieved: 97.8 / 86.4 / 98.6 / 98.1, and ratcheted to
+    // Achieved: 98.4 / 90.2 / 98.6 / 98.3, and ratcheted to
     // a couple of points under. Never lower these to accommodate a drop.
     "./src/api-client.ts": {
-      statements: 95,
-      branches: 84,
+      statements: 96,
+      branches: 88,
       functions: 96,
       lines: 96,
     },
