@@ -2394,7 +2394,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       account_number:
         "The tastytrade account number to search orders for (e.g. '5WX34382'). Required.",
       start_date:
-        "Lower bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than start_at; use one or the other.",
+        "Lower bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than start_at; use one or the other. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date:
         "Upper bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than end_at.",
       start_at:
@@ -2639,7 +2639,8 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
     paramDescriptions: {
       account_number:
         "The tastytrade account number to search orders for. Required.",
-      start_date: "Lower bound on order date (inclusive), YYYY-MM-DD.",
+      start_date:
+        "Lower bound on order date (inclusive), YYYY-MM-DD. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date: "Upper bound on order date (inclusive), YYYY-MM-DD.",
       start_at: "Lower bound on order time (inclusive), ISO 8601 date-time.",
       end_at: "Upper bound on order time (inclusive), ISO 8601 date-time.",
@@ -3899,7 +3900,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       account_numbers:
         "Optional array of tastytrade account numbers (e.g. ['5WX34382']) to restrict the search to specific accounts owned by the customer. Sent as repeated account-numbers[]= query params. Omit to search all of the customer's accounts.",
       start_date:
-        "Inclusive lower bound on order date as a calendar day (YYYY-MM-DD). Use start_at instead when instant-level precision is needed.",
+        "Inclusive lower bound on order date as a calendar day (YYYY-MM-DD). Use start_at instead when instant-level precision is needed. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date:
         "Inclusive upper bound on order date as a calendar day (YYYY-MM-DD).",
       start_at:

@@ -26,6 +26,14 @@ import { createHarness, callOk, callError, loadFixture } from "./harness.js";
 import type { Harness, RecordedRequest, Route } from "./harness.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { _resetTokensForTest } from "../../src/safety/confirmation.js";
+import { DEFAULT_ORDER_SEARCH_DAYS } from "../../src/api-client.js";
+
+/** The start-date the client gives an order search that names no start. */
+function defaultStartDate(): string {
+  return new Date(Date.now() - DEFAULT_ORDER_SEARCH_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+}
 import { MCP_ORDER_SOURCE } from "../../src/mcp-server/index.js";
 
 const ACCT = "5WX00001";
@@ -258,11 +266,12 @@ describe("order search: tastytrade_search_orders / tastytrade_get_orders", () =>
     expect(h.requests[1].params).toEqual({
       "status[]": ["Filled"],
       "per-page": 5,
+      "start-date": defaultStartDate(),
     });
     expect(viaAlias).toEqual(viaSearch);
   });
 
-  it("sends no query params when only the account is given", async () => {
+  it("adds only the default start-date when only the account is given", async () => {
     h = await createHarness({
       routes: [
         {
@@ -276,7 +285,9 @@ describe("order search: tastytrade_search_orders / tastytrade_get_orders", () =>
     expect(
       await callOk(h, "tastytrade_get_orders", { account_number: ACCT }),
     ).toEqual([]);
-    expect(requestFor(h, "GET", `/accounts/${ACCT}/orders`).params).toEqual({});
+    expect(requestFor(h, "GET", `/accounts/${ACCT}/orders`).params).toEqual({
+      "start-date": defaultStartDate(),
+    });
   });
 });
 
@@ -367,6 +378,7 @@ describe("customer-level order tools", () => {
       "status[]": ["Live"],
       "underlying-symbol": "AAPL",
       "per-page": 10,
+      "start-date": defaultStartDate(),
     });
     expectKebabOnly(req);
     expect(result).toEqual(fixture.items);
@@ -399,7 +411,7 @@ describe("customer-level order tools", () => {
   // bearer. The customer is now the authenticated one and the argument is gone,
   // so the route is `/customers/me/...` and a value like "12345" is refused
   // nowhere because there is nowhere to put it.
-  it("get_customer_live_orders GETs /customers/me/orders/live and forwards only account-numbers[]", async () => {
+  it("get_customer_live_orders GETs /customers/me/orders/live with account-numbers[] and pages at 200", async () => {
     const fixture = loadFixture("tastytrade_get_customer_live_orders") as {
       items: Array<Record<string, unknown>>;
     };
@@ -419,9 +431,13 @@ describe("customer-level order tools", () => {
     });
 
     const req = requestFor(h, "GET", "/customers/me/orders/live");
-    // The tool's schema exposes only account_numbers, and the dispatcher
-    // forwards exactly one param — no date/status filters leak in.
-    expect(req.params).toEqual({ "account-numbers[]": [ACCT] });
+    // The tool's schema exposes only account_numbers, so no date/status
+    // filters leak in; the client adds only its own paging.
+    expect(req.params).toEqual({
+      "account-numbers[]": [ACCT],
+      "per-page": 200,
+      "page-offset": 0,
+    });
     expectKebabOnly(req);
     expect(result).toEqual(fixture.items);
   });
