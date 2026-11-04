@@ -21,14 +21,14 @@ import {
 } from "./bounded-text.js";
 import type { BoundedTally, WalkBudget } from "./bounded-text.js";
 
-export type ToolErrorCode =
-  | "auth_failed"
-  | "not_found"
-  | "validation"
-  | "rate_limit_exceeded"
-  | "dry_run_required"
-  | "confirmation_expired"
-  | "sanity_check_failed"
+export const TOOL_ERROR_CODES = [
+  "auth_failed",
+  "not_found",
+  "validation",
+  "rate_limit_exceeded",
+  "dry_run_required",
+  "confirmation_expired",
+  "sanity_check_failed",
   /**
    * The tool exists but the server is running with TASTYTRADE_READ_ONLY set, so
    * every write and destructive tool is disabled. Distinct from `not_found`
@@ -36,7 +36,7 @@ export type ToolErrorCode =
    * remedy is a server-configuration change, never a different request, so an
    * agent must not retry.
    */
-  | "read_only_mode"
+  "read_only_mode",
   /**
    * The caller stopped waiting for this call before the money-moving request
    * was sent, so it was not sent. The MCP client cancels a request when its own
@@ -50,9 +50,12 @@ export type ToolErrorCode =
    * common case is that nobody is left to read it — may re-dry-run and submit
    * once, from scratch, because the consumed confirmation token is gone.
    */
-  | "request_cancelled"
-  | "upstream_error"
-  | "network";
+  "request_cancelled",
+  "upstream_error",
+  "network",
+] as const;
+
+export type ToolErrorCode = (typeof TOOL_ERROR_CODES)[number];
 
 export interface ToolError {
   code: ToolErrorCode;
