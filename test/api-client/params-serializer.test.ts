@@ -15,9 +15,9 @@
  * per-request serializer OVERRIDES the instance default, so every survivor was a hole.
  *
  * Two halves answer different questions. The REFUSALS are the class closure. The PINNED
- * SHAPES protect the live API: all twenty-two `params` sites are byte-identical across
- * the change, and the expected strings were captured from a real loopback origin BEFORE
- * the fix rather than written from the code.
+ * SHAPES pin the exact query string each method sends, so a wrong `style` on any one of
+ * them shows up as a changed request. The expected strings are written out literally,
+ * not computed from the code.
  */
 import { describe, it, expect } from "@jest/globals";
 import { AxiosHeaders } from "axios";
@@ -268,10 +268,9 @@ describe("every request carries a serializer, so none inherits axios's default",
 });
 
 /**
- * The twelve shapes that were hand-written per method, pinned byte-for-byte.
- * This is the half that protects the live API: a wrong `style` on any one of
- * them is a silently different request, and the API is the only thing that
- * would have noticed.
+ * The exact query string each method sends. A wrong `style` on any one of them
+ * is a silently different request, so each is pinned byte-for-byte. Keys sent
+ * with the `[]` suffix are the ones the API needs to read every value.
  */
 const PINNED: ReadonlyArray<
   readonly [string, (c: TastytradeClient) => Promise<unknown>, string]
@@ -281,9 +280,10 @@ const PINNED: ReadonlyArray<
     (c) =>
       c.getPositions("5WX00001", {
         symbol: ["AAPL", "MSFT"],
+        "underlying-symbol": ["SPY", "QQQ"],
         "include-marks": true,
       }),
-    "symbol=AAPL&symbol=MSFT&include-marks=true",
+    "symbol=AAPL&symbol=MSFT&underlying-symbol%5B%5D=SPY&underlying-symbol%5B%5D=QQQ&include-marks=true",
   ],
   [
     "getQuote",
@@ -319,15 +319,30 @@ const PINNED: ReadonlyArray<
   ],
   [
     "getFutures",
-    (c) => c.getFutures({ exchange: ["CME", "CFE"] }),
-    "exchange=CME&exchange=CFE",
+    (c) =>
+      c.getFutures({
+        symbol: ["/ESZ6", "/NQZ6"],
+        "product-code": ["CL", "ES"],
+        "security-id": ["1", "2"],
+        exchange: ["CME", "CFE"],
+      }),
+    "symbol%5B%5D=%2FESZ6&symbol%5B%5D=%2FNQZ6&product-code%5B%5D=CL&product-code%5B%5D=ES&security-id%5B%5D=1&security-id%5B%5D=2&exchange=CME&exchange=CFE",
   ],
   [
     "getCryptocurrencies",
     (c) => c.getCryptocurrencies({ symbol: ["BTC/USD", "ETH/USD"] }),
-    "symbol=BTC%2FUSD&symbol=ETH%2FUSD",
+    "symbol%5B%5D=BTC%2FUSD&symbol%5B%5D=ETH%2FUSD",
   ],
-  ["getWarrants", (c) => c.getWarrants({ symbol: ["ABC"] }), "symbol=ABC"],
+  [
+    "getCryptocurrencies with a single string symbol",
+    (c) => c.getCryptocurrencies({ symbol: "BTC/USD" }),
+    "symbol%5B%5D=BTC%2FUSD",
+  ],
+  [
+    "getWarrants",
+    (c) => c.getWarrants({ symbol: ["ABC", "DEF"] }),
+    "symbol%5B%5D=ABC&symbol%5B%5D=DEF",
+  ],
   [
     "getTransactions",
     (c) =>
@@ -349,7 +364,7 @@ const PINNED: ReadonlyArray<
   [
     "getCurrentSessionsMulti",
     (c) => c.getCurrentSessionsMulti(["CME", "Equity"]),
-    "instrument-collections=CME&instrument-collections=Equity",
+    "instrument-collections%5B%5D=CME&instrument-collections%5B%5D=Equity",
   ],
   // And the three that were already on the default, so the consolidation cannot
   // change them either.
@@ -370,19 +385,24 @@ const PINNED: ReadonlyArray<
   ],
 ];
 
-describe("consolidating the serializers changes no request", () => {
-  it.each(PINNED)("keeps %s byte-identical", async (_label, call, expected) => {
-    const { client, seen } = createRecorder();
-    await call(client);
-    expect(seen).toHaveLength(1);
-    expect(seen[0].query).toBe(expected);
-  });
+describe("each method sends its pinned query string", () => {
+  it.each(PINNED)(
+    "sends the pinned query for %s",
+    async (_label, call, expected) => {
+      const { client, seen } = createRecorder();
+      await call(client);
+      expect(seen).toHaveLength(1);
+      expect(seen[0].query).toBe(expected);
+    },
+  );
 });
 
 describe("SOURCE INVARIANT: one serializer, on the instance", () => {
   it("declares `paramsSerializer` only on the axios instance and delegates elsewhere", () => {
     const declarations = [
-      ...CLIENT_SOURCE.matchAll(/paramsSerializer:\s*([^\n]*)/g),
+      ...CLIENT_SOURCE.matchAll(
+        /paramsSerializer:\s*(\(p\) =>\s*[^\n]*|[^\n]*)/g,
+      ),
     ].map((m) => m[1].trim());
     // Every declaration must delegate to `serializeParams` — a per-request
     // serializer OVERRIDES the instance default, so a surviving hand-written

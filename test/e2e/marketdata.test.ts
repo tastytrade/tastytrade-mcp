@@ -838,7 +838,7 @@ describe("market sessions: tastytrade_get_market_session", () => {
     const req = h.lastRequest()!;
     expect(req.method).toBe("GET");
     expect(req.url).toBe("/market-time/sessions/current");
-    // Serialized by the client as repeated `instrument-collections=` keys; the
+    // Serialized by the client as repeated `instrument-collections[]=` keys; the
     // params object the adapter records is the pre-serialization array.
     expect(req.params).toEqual({
       "instrument-collections": ["Equity", "CME"],
