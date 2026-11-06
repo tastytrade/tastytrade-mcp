@@ -65,6 +65,6 @@
     "typescript-eslint": "^8.60.1"
   },
   "overrides": {
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   }
 }
