@@ -1,4 +1,5 @@
 /node_modules
+.npm-cache/
 /.env
 .mcp.json
 .DS_Store
