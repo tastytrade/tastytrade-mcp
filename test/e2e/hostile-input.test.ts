@@ -477,17 +477,10 @@ describe("prototype pollution through the translation seam", () => {
   });
 
   /**
-   * A `constructor` key is a special case worth pinning, because it never
-   * reaches this server's code at all: the MCP SDK validates `params.arguments`
-   * with a zod record schema whose plain-object test reads `value.constructor`,
-   * so an own `constructor` key makes the whole `tools/call` fail validation.
-   *
-   * The consequence to be aware of is the error SHAPE, not a security gap: the
-   * caller gets a JSON-RPC error rather than a `validation` envelope, because
-   * the request never becomes a tool call. No bucket is charged and no request
-   * is made, so it is refused strictly more cheaply than a dispatched call.
+   * Zod 3 rejected an own constructor property during schema validation.
+   * Preserve that boundary explicitly with Zod 4: no dispatch or upstream I/O.
    */
-  it("is refused by the SDK's own schema validation when `constructor` is a top-level key", async () => {
+  it("rejects a top-level constructor key at the protocol boundary", async () => {
     const res = await attempt(
       "tastytrade_dry_run_order",
       hostile(

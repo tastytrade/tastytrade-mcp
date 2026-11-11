@@ -7,6 +7,8 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  ErrorCode,
+  McpError,
   ListToolsRequestSchema,
   ListResourcesRequestSchema,
   ListResourceTemplatesRequestSchema,
@@ -3608,13 +3610,17 @@ export class TastytradeMCPServer {
     // closes. It is the only way this server can learn that nobody is waiting
     // for the answer any more, and on a submit path that is the difference
     // between one order and two. See `assertCallerStillWaiting`.
-    this.server.setRequestHandler(CallToolRequestSchema, (request, extra) =>
-      this.dispatchToolCall(
-        request.params.name,
-        request.params.arguments || {},
-        extra?.signal,
-      ),
-    );
+    // Preserve the pre-Zod-4 rejection before dispatch or any upstream request.
+    this.server.setRequestHandler(CallToolRequestSchema, (request, extra) => {
+      const args = request.params.arguments || {};
+      if (Object.hasOwn(args, "constructor")) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Top-level constructor argument is forbidden.",
+        );
+      }
+      return this.dispatchToolCall(request.params.name, args, extra?.signal);
+    });
   }
 
   /**
