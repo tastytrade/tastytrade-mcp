@@ -608,18 +608,13 @@ function describeInstrumentType(type: string): string {
 /**
  * Might this leg OPEN a position?
  *
- * Fail-closed, and the direction is the whole point: this decides whether an
- * order may enter a closing-only account, so "we could not read the action" has
- * to count as "it might open". A bare `leg.action?.includes("to Open")` gets that
- * wrong twice over — a non-string action raises a TypeError, the same shape the
- * instrument-type read above rules out, and merely guarding the call would leave
- * an unreadable action reading as a CLOSING leg, waved into an account that may
- * not open positions. So the type test comes first and its failure means "might
- * open".
+ * A leg is closing only when its action is exactly "Buy to Close" or
+ * "Sell to Close". Anything else, including a plain futures "Buy" or "Sell" or
+ * a non-string action, might open.
  */
 function mayOpenPosition(leg: OrderLeg): boolean {
   const action: unknown = leg.action;
-  return typeof action !== "string" || action.includes("to Open");
+  return action !== "Buy to Close" && action !== "Sell to Close";
 }
 
 /**
@@ -1262,13 +1257,21 @@ export async function runAccountStateChecks(
   } else {
     if (flagsReadable) ran.add("account_closing_only");
     if (status["is-closing-only"]) {
-      const opening = legs.some(mayOpenPosition);
-      if (opening) {
+      const openingLegs = legs.filter(mayOpenPosition);
+      if (openingLegs.length > 0) {
+        const hasFuture = openingLegs.some(
+          (l) => instrumentTypeOf(l) === "Future",
+        );
         throw toolError({
           code: "sanity_check_failed",
           message: "Account is closing-only — cannot open new positions.",
           retryable: false,
-          hint: "Use a 'Buy to Close' / 'Sell to Close' action instead.",
+          hint: hasFuture
+            ? "A futures leg is only 'Buy' or 'Sell', so this server cannot " +
+              "confirm that it closes a position, and futures orders are " +
+              "refused on a closing-only account. Close the position on the " +
+              "tastytrade platform instead."
+            : "Use a 'Buy to Close' / 'Sell to Close' action instead.",
         });
       }
       warnings.push("Account is closing-only.");

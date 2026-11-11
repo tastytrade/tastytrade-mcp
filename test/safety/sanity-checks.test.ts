@@ -744,13 +744,8 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
 
 // ---------------------------------------------------------------------------
 // The closing-only gate reads `action`, and it must fail CLOSED on an action it
-// cannot read.
-//
-// `legs.some((l) => l.action?.includes("to Open"))` raised a bare TypeError on a
-// non-string action — and the tempting one-line repair (guard the call, treat
-// anything non-string as falsy) would have been worse than the crash: a leg
-// whose direction cannot be read would have counted as CLOSING and been waved
-// into an account that may not open positions.
+// cannot read: a leg whose direction is unknown is refused, not waved through
+// as closing.
 // ---------------------------------------------------------------------------
 
 describe("runSanityChecks — an unreadable leg action at the closing-only gate", () => {
@@ -806,6 +801,222 @@ describe("runSanityChecks — an unreadable leg action at the closing-only gate"
       cleanDryRun,
     );
     expect(res.warnings).toContain("Account is closing-only.");
+  });
+});
+
+describe("runSanityChecks — the closing-only gate and the action text", () => {
+  // Outright futures legs use a plain "Buy" or "Sell".
+  it.each([["Buy"], ["Sell"]])(
+    "refuses an outright futures %s leg into a closing-only account",
+    async (action) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({
+            limits: ALL_LIMITS,
+            status: { "is-closing-only": true },
+          }),
+          ACCT,
+          {
+            legs: [
+              {
+                "instrument-type": "Future",
+                symbol: "/ESZ6",
+                action,
+                quantity: 1,
+              },
+            ],
+          },
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      expect(e.toolError.message).toMatch(/closing-only/i);
+    },
+  );
+
+  it.each([
+    ["Equity", "AAPL", "Buy to Close"],
+    ["Equity Option", "AAPL  261218C00200000", "Sell to Close"],
+  ])(
+    "still admits a %s %s leg into a closing-only account",
+    async (type, symbol, action) => {
+      const res = await runSanityChecks(
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { "is-closing-only": true },
+        }),
+        ACCT,
+        {
+          legs: [{ "instrument-type": type, symbol, action, quantity: 1 }],
+        },
+        cleanDryRun,
+      );
+      expect(res.warnings).toContain("Account is closing-only.");
+    },
+  );
+
+  it("refuses a mixed order when only one leg is closing", async () => {
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { "is-closing-only": true },
+        }),
+        ACCT,
+        {
+          legs: [
+            {
+              "instrument-type": "Equity",
+              symbol: "AAPL",
+              action: "Sell to Close",
+              quantity: 1,
+            },
+            {
+              "instrument-type": "Future",
+              symbol: "/ESZ6",
+              action: "Buy",
+              quantity: 1,
+            },
+          ],
+        },
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.message).toMatch(/closing-only/i);
+  });
+
+  it.each([["buy to close"], ["Buy to Close "], ["Sell to Closeout"]])(
+    "counts the inexact action %j as opening",
+    async (action) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({
+            limits: ALL_LIMITS,
+            status: { "is-closing-only": true },
+          }),
+          ACCT,
+          {
+            legs: [
+              {
+                "instrument-type": "Equity",
+                symbol: "AAPL",
+                action,
+                quantity: 1,
+              },
+            ],
+          },
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.message).toMatch(/closing-only/i);
+    },
+  );
+
+  const FUTURES_HINT =
+    "A futures leg is only 'Buy' or 'Sell', so this server cannot confirm " +
+    "that it closes a position, and futures orders are refused on a " +
+    "closing-only account. Close the position on the tastytrade platform " +
+    "instead.";
+
+  async function closingOnlyRejection(legs: Array<Record<string, unknown>>) {
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { "is-closing-only": true },
+        }),
+        ACCT,
+        { legs },
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    return e.toolError;
+  }
+
+  it.each([["Buy"], ["Sell"]])(
+    "refuses a futures %s with the same plain hint, so the advice never loops",
+    async (action) => {
+      // Buy and Sell are both refused; neither hint may suggest the other.
+      const err = await closingOnlyRejection([
+        {
+          "instrument-type": "Future",
+          symbol: "/ESZ6",
+          action,
+          quantity: 1,
+        },
+      ]);
+      expect(err.message).toMatch(/closing-only/i);
+      expect(err.hint).toBe(FUTURES_HINT);
+      expect(err.hint).not.toMatch(/opposite/i);
+    },
+  );
+
+  it("gives a Future Option leg the option advice, since it uses 'to Open' actions", async () => {
+    const err = await closingOnlyRejection([
+      {
+        "instrument-type": "Future Option",
+        symbol: "./ESZ6 EW4U6 260116C6000",
+        action: "Buy to Open",
+        quantity: 1,
+      },
+    ]);
+    expect(err.hint).toBe(
+      "Use a 'Buy to Close' / 'Sell to Close' action instead.",
+    );
+  });
+
+  it("gives the futures hint when the futures leg is not the first opening leg", async () => {
+    const err = await closingOnlyRejection([
+      {
+        "instrument-type": "Equity Option",
+        symbol: "AAPL  261218C00200000",
+        action: "Buy to Open",
+        quantity: 1,
+      },
+      {
+        "instrument-type": "Future",
+        symbol: "/ESZ6",
+        action: "Sell",
+        quantity: 1,
+      },
+    ]);
+    expect(err.hint).toBe(FUTURES_HINT);
+  });
+
+  it("keeps the 'to Close' advice for an equity leg", async () => {
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { "is-closing-only": true },
+        }),
+        ACCT,
+        {
+          legs: [
+            {
+              "instrument-type": "Equity",
+              symbol: "AAPL",
+              action: "Buy to Open",
+              quantity: 1,
+            },
+          ],
+        },
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.hint).toBe(
+      "Use a 'Buy to Close' / 'Sell to Close' action instead.",
+    );
   });
 });
 
