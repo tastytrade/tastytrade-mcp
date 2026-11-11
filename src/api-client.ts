@@ -995,6 +995,12 @@ export interface ParamStyle {
   keyFor?: (key: string) => string;
 }
 
+/** A style that sends the named keys as `key[]`, so the API reads every value. */
+function arrayKeys(...names: string[]): ParamStyle {
+  const set = new Set(names);
+  return { keyFor: (key) => (set.has(key) ? `${key}[]` : key) };
+}
+
 /** Can this value be written as a query value at all? */
 function isQueryScalar(value: unknown): boolean {
   const t = typeof value;
@@ -1535,11 +1541,9 @@ export class TastytradeClient {
    * false) because agents almost always want mark prices for dashboards.
    * This is a documented breaking change vs. the prior default.
    *
-   * `underlying-symbol` is an array filter, serialized as a REPEATED BARE key
-   * (`underlying-symbol=AAPL&underlying-symbol=SPY`) — not with a `[]` suffix.
-   * open-api-spec/balances-and-positions.md documents the bare form
-   * (`underlying-symbol=AAPL`), which is what the serializer below emits.
-   * Contrast the orders endpoints, whose docs do show `status[]=…`.
+   * `underlying-symbol` is an array filter and is sent as
+   * `underlying-symbol[]=AAPL&underlying-symbol[]=SPY`. `symbol` is a single
+   * value in the docs and stays bare.
    */
   async getPositions(accountNumber: string, params?: Record<string, unknown>) {
     const response = await this.client.get(
@@ -1550,6 +1554,8 @@ export class TastytradeClient {
       ]),
       {
         params: params ?? {},
+        paramsSerializer: (p) =>
+          serializeParams(p, arrayKeys("underlying-symbol")),
       },
     );
     return envelopeItemsOrBody(response);
@@ -2095,6 +2101,8 @@ export class TastytradeClient {
   async getFutures(params?: Record<string, unknown>) {
     const response = await this.client.get("/instruments/futures", {
       params: params ?? {},
+      paramsSerializer: (p) =>
+        serializeParams(p, arrayKeys("symbol", "product-code", "security-id")),
     });
     return envelopeItemsOrBody(response);
   }
@@ -2183,6 +2191,7 @@ export class TastytradeClient {
   async getCryptocurrencies(params?: { symbol?: string | string[] }) {
     const response = await this.client.get("/instruments/cryptocurrencies", {
       params: params ?? {},
+      paramsSerializer: (p) => serializeParams(p, arrayKeys("symbol")),
     });
     return envelopeItemsOrBody(response);
   }
@@ -2197,6 +2206,7 @@ export class TastytradeClient {
   async getWarrants(params?: { symbol?: string | string[] }) {
     const response = await this.client.get("/instruments/warrants", {
       params: params ?? {},
+      paramsSerializer: (p) => serializeParams(p, arrayKeys("symbol")),
     });
     return envelopeItemsOrBody(response);
   }
@@ -2616,6 +2626,8 @@ export class TastytradeClient {
   async getCurrentSessionsMulti(collections: Array<"CFE" | "CME" | "Equity">) {
     const response = await this.client.get("/market-time/sessions/current", {
       params: { "instrument-collections": collections },
+      paramsSerializer: (p) =>
+        serializeParams(p, arrayKeys("instrument-collections")),
     });
     return envelopeDataOrBody(response);
   }
