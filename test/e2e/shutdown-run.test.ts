@@ -81,7 +81,7 @@ async function runWithCallInFlight(stdout: Writable, delayMs = 300) {
     if (Date.now() > deadline) throw new Error("the call never started");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
-  return { server, signals, exited };
+  return { server, signals, exited, send };
 }
 
 describe("run() with a call in flight when SIGTERM arrives", () => {
@@ -125,6 +125,50 @@ describe("run() with a call in flight when SIGTERM arrives", () => {
     await expect(exited).resolves.toBe(0);
 
     expect(processed.some((chunk) => chunk.includes('"id":2'))).toBe(true);
+  });
+
+  it("exits 0 promptly when the client cancels the running call during the drain, with no response for it", async () => {
+    // The SDK sends no response for a cancelled request, so only the request's own
+    // abort signal can release the call's slot. If the drain were not told about the
+    // abort, it would wait out its 30 second bound and exit 1.
+    const stdout = new PassThrough();
+    let written = "";
+    stdout.on("data", (chunk) => (written += chunk));
+    const { server, signals, exited, send } = await runWithCallInFlight(
+      stdout,
+      300,
+    );
+
+    signals.emit("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    send({
+      jsonrpc: "2.0",
+      method: "notifications/cancelled",
+      params: { requestId: 2, reason: "client gave up" },
+    });
+
+    const started = Date.now();
+    const code = await Promise.race([
+      exited,
+      new Promise<string>((resolve) =>
+        setTimeout(() => resolve("no exit within 3s"), 3000),
+      ),
+    ]);
+    const atExit = written;
+
+    expect(code).toBe(0);
+    expect(Date.now() - started).toBeLessThan(2000);
+    const ids = atExit
+      .split("\n")
+      .filter((line) => line.trim() !== "")
+      .map((line) => JSON.parse(line))
+      .map((message) => message.id);
+    expect(ids).toContain(1);
+    expect(ids).not.toContain(2);
+    // Let the upstream call finish so no timer outlives the test.
+    while (server.running > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
   });
 
   it("exits 1 at once on a second signal", async () => {
