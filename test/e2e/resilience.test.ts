@@ -258,6 +258,7 @@ function sanityRoutes(): Route[] {
           "account-number": ACCT,
           "is-frozen": false,
           "is-closing-only": false,
+          "is-in-margin-call": false,
         },
       },
     },
@@ -2137,7 +2138,15 @@ describe("a submit whose 2xx carries no order", () => {
       {
         matcher: /\/accounts\/[^/]+\/position-limit$/,
         method: "GET",
-        reply: (req) => ({ data: { "account-number": req.url.split("/")[2] } }),
+        reply: (req) => ({
+          data: {
+            "account-number": req.url.split("/")[2],
+            "equity-order-size": 1_000_000,
+            "equity-option-order-size": 1_000_000,
+            "future-order-size": 1_000_000,
+            "future-option-order-size": 1_000_000,
+          },
+        }),
       },
       {
         matcher: /\/accounts\/[^/]+\/trading-status$/,
@@ -2147,6 +2156,7 @@ describe("a submit whose 2xx carries no order", () => {
             "account-number": req.url.split("/")[2],
             "is-frozen": false,
             "is-closing-only": false,
+            "is-in-margin-call": false,
           },
         }),
       },

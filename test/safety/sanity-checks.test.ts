@@ -11,6 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  runAccountStateChecks,
   runSanityChecks,
   runStoredDryRunChecks,
   isCleanDryRun,
@@ -1082,13 +1083,93 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
     },
   );
 
-  it("warns when the payload is readable but carries no ceiling for the leg", async () => {
+  it("refuses an order that might open a position when the payload names the account but carries no ceiling for the leg", async () => {
+    // 1e9 shares with no ceiling to hold them to would otherwise be admitted
+    // with a warning.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: { "account-number": ACCT },
+          status: CLEAN_STATUS,
+        }),
+        ACCT,
+        equityLeg(1_000_000_000),
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.code).toBe("sanity_check_failed");
+    expect(e.toolError.retryable).toBe(false);
+    expect(e.toolError.message).toContain("position limits");
+    expect(e.toolError.message).toContain("no usable ceiling");
+    expect(e.toolError.hint).toContain("not a transient failure");
+    expect(e.toolError.hint).toContain("Buy to Close");
+  });
+
+  it("checks the same order against the ceiling once the record carries one", async () => {
+    // Control for the refusal above: what differs is the ceiling, so the refusal
+    // is about its absence and not about this order.
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: { "account-number": ACCT, "equity-order-size": 100 },
+          status: CLEAN_STATUS,
+        }),
+        ACCT,
+        equityLeg(1_000_000_000),
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.message).toContain("exceeds account order limit 100");
+  });
+
+  it("refuses when only the opening leg of a mixed order lacks a ceiling, and warns when only the closing one does", async () => {
+    const mixed = (openingType: string, closingType: string) => ({
+      legs: [
+        {
+          "instrument-type": openingType,
+          symbol: "AAPL",
+          action: "Buy to Open",
+          quantity: 1,
+        },
+        {
+          "instrument-type": closingType,
+          symbol: "./ESZ6 A",
+          action: "Sell to Close",
+          quantity: 1,
+        },
+      ],
+    });
+    const limits = { "account-number": ACCT, "equity-order-size": 100 };
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({ limits, status: CLEAN_STATUS }),
+        ACCT,
+        mixed("Future Option", "Equity"),
+        cleanDryRun,
+      ),
+    );
+    expect(isToolErrorException(e)).toBe(true);
+    const res = await runSanityChecks(
+      makeClient({ limits, status: CLEAN_STATUS }),
+      ACCT,
+      mixed("Equity", "Future Option"),
+      cleanDryRun,
+    );
+    expect(res.warnings).toHaveLength(1);
+    expect(res.warnings[0]).toContain('"future-option-order-size"');
+  });
+
+  it("warns when the payload is readable but carries no ceiling for a closing leg", async () => {
     // `{}` is an ordinary upstream outcome, and it would read exactly like a
     // successful check.
     const res = await runSanityChecks(
       makeClient({ limits: { "account-number": ACCT }, status: CLEAN_STATUS }),
       ACCT,
-      equityLeg(1_000_000_000),
+      equityLeg(1_000_000_000, "Sell to Close"),
       cleanDryRun,
     );
     expect(res.warnings).toEqual([
@@ -1110,19 +1191,19 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
           {
             "instrument-type": "Equity",
             symbol: "AAPL",
-            action: "Buy to Open",
+            action: "Buy to Close",
             quantity: 1,
           },
           {
             "instrument-type": "Future Option",
             symbol: "./ESZ6 A",
-            action: "Buy to Open",
+            action: "Sell to Close",
             quantity: 1,
           },
           {
             "instrument-type": "Future Option",
             symbol: "./ESZ6 B",
-            action: "Buy to Open",
+            action: "Sell to Close",
             quantity: 2,
           },
         ],
@@ -1190,16 +1271,27 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
   ])(
     "reports %s as an unusable ceiling rather than comparing against it",
     async (_label, limit) => {
+      const limits = { "account-number": ACCT, "equity-order-size": limit };
       const res = await runSanityChecks(
-        makeClient({
-          limits: { "account-number": ACCT, "equity-order-size": limit },
-          status: CLEAN_STATUS,
-        }),
+        makeClient({ limits, status: CLEAN_STATUS }),
         ACCT,
-        equityLeg(1_000_000_000),
+        equityLeg(1_000_000_000, "Sell to Close"),
         cleanDryRun,
       );
       expect(res.warnings.join(" ")).toContain('no usable "equity-order-size"');
+
+      // The same record refuses an order that might open.
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({ limits, status: CLEAN_STATUS }),
+          ACCT,
+          equityLeg(1_000_000_000),
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.message).toContain("no usable ceiling");
     },
   );
 });
@@ -1617,21 +1709,23 @@ describe("runSanityChecks — a trading-status object carrying no account state"
     },
   );
 
-  it("stays quiet when the payload answers even one of the questions", async () => {
-    // ANY, not ALL, and this is the assertion that holds it there. The spec
-    // says a healthy account legitimately omits individual flags, so a warning
-    // per absent flag would fire on nearly every order placed and stop being
-    // read at all.
+  it("stays quiet on an order that might open only when every flag it depends on is a boolean", async () => {
+    // The spec says a healthy account can omit flags, but an omitted
+    // `is-frozen`, `is-closing-only` or `is-in-margin-call` is a restriction
+    // nobody read. Only `is-risk-reducing-only` is advisory, so a record without
+    // it passes the gate; checks_not_run says it was not evaluated.
+    const { "is-risk-reducing-only": _omitted, ...threeFlags } = CLEAN_STATUS;
     const res = await runSanityChecks(
-      makeClient({
-        limits: ALL_LIMITS,
-        status: { "account-number": ACCT, "is-frozen": false },
-      }),
+      makeClient({ limits: ALL_LIMITS, status: threeFlags }),
       ACCT,
       equityLeg(1),
       cleanDryRun,
     );
     expect(res.warnings).toEqual([]);
+    expect(res.checksNotRun).toContain("account_risk_reducing_only");
+    expect(res.checksNotRun).not.toContain("account_frozen");
+    expect(res.checksNotRun).not.toContain("account_closing_only");
+    expect(res.checksNotRun).not.toContain("account_margin_call");
   });
 
   it("still runs the hard blocks underneath the warning", async () => {
@@ -1649,6 +1743,169 @@ describe("runSanityChecks — a trading-status object carrying no account state"
       ),
     );
     expect(isToolErrorException(e)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A trading status that names the account and carries SOME flags, or carries
+// them as something other than a JSON boolean. `0`, `""` and `null` are not the
+// broker saying "no", and a flag that was never sent is a restriction nobody
+// read. An order that might open is refused for the first of is-frozen,
+// is-closing-only and is-in-margin-call that is not a boolean; one that only
+// closes is warned about, and each check is recorded as run only when its own
+// flag was a boolean.
+// ---------------------------------------------------------------------------
+
+describe("runSanityChecks — a trading status with a missing or non-boolean flag", () => {
+  const ACCOUNT = { "account-number": ACCT };
+  const CASES: Array<
+    [label: string, status: Record<string, unknown>, flag: string]
+  > = [
+    [
+      "only is-in-margin-call",
+      { ...ACCOUNT, "is-in-margin-call": false },
+      "is-frozen",
+    ],
+    [
+      "is-frozen and is-closing-only as the number 0",
+      { ...ACCOUNT, "is-frozen": 0, "is-closing-only": 0 },
+      "is-frozen",
+    ],
+    [
+      "is-frozen as an empty string",
+      {
+        ...CLEAN_STATUS,
+        "is-frozen": "",
+      },
+      "is-frozen",
+    ],
+    [
+      "only is-risk-reducing-only",
+      { ...ACCOUNT, "is-risk-reducing-only": false },
+      "is-frozen",
+    ],
+    [
+      "is-closing-only as the number 0",
+      { ...CLEAN_STATUS, "is-closing-only": 0 },
+      "is-closing-only",
+    ],
+    [
+      "is-in-margin-call as null",
+      { ...CLEAN_STATUS, "is-in-margin-call": null },
+      "is-in-margin-call",
+    ],
+  ];
+
+  it.each(CASES)(
+    "refuses an order that might open a position on %s, naming the flag",
+    async (_label, status, flag) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({ limits: ALL_LIMITS, status }),
+          ACCT,
+          equityLeg(1),
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      expect(e.toolError.retryable).toBe(false);
+      expect(e.toolError.message).toContain("trading status");
+      expect(e.toolError.message).toContain(
+        `no true-or-false value for ${flag}`,
+      );
+      expect(e.toolError.hint).toContain("not a transient failure");
+    },
+  );
+
+  it.each(CASES)(
+    "refuses the same flags on a route with no legs for %s",
+    async (_label, status) => {
+      // The legless routes (edit, replace) have nothing to show they only close.
+      const e = await captureRejection(
+        runAccountStateChecks(makeClient({ status }), ACCT),
+      );
+      expect(isToolErrorException(e)).toBe(true);
+    },
+  );
+
+  it("sends the same order once all three flags are booleans", async () => {
+    // Control for the refusals: the order, limits and account are unchanged, so
+    // the flags are what the refusal turned on.
+    const res = await runSanityChecks(
+      makeClient({ limits: ALL_LIMITS, status: CLEAN_STATUS }),
+      ACCT,
+      equityLeg(1),
+      cleanDryRun,
+    );
+    expect(res.warnings).toEqual([]);
+    expect(res.checksNotRun.filter((id) => id.startsWith("account_"))).toEqual(
+      [],
+    );
+  });
+
+  it("still refuses a frozen account as frozen when other flags are missing", async () => {
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { ...ACCOUNT, "is-frozen": true },
+        }),
+        ACCT,
+        equityLeg(1),
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.message).toMatch(/frozen/i);
+  });
+
+  it("warns on a closing order, naming what did not run, and records only the checks whose flag was read", async () => {
+    const res = await runSanityChecks(
+      makeClient({
+        limits: ALL_LIMITS,
+        status: { ...ACCOUNT, "is-in-margin-call": false },
+      }),
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
+    expect(res.warnings).toHaveLength(1);
+    expect(res.warnings[0]).toContain("is-frozen / is-closing-only");
+    expect(res.warnings[0]).not.toContain("is-in-margin-call");
+    // Its own flag was a boolean, so the margin-call check ran; the other three
+    // were never read, so none of them may read as run.
+    expect(res.checksNotRun).toEqual(
+      expect.arrayContaining([
+        "account_frozen",
+        "account_closing_only",
+        "account_risk_reducing_only",
+      ]),
+    );
+    expect(res.checksNotRun).not.toContain("account_margin_call");
+  });
+
+  it("does not record a check as run when its flag is a number or an empty string", async () => {
+    const res = await runSanityChecks(
+      makeClient({
+        limits: ALL_LIMITS,
+        status: {
+          ...CLEAN_STATUS,
+          "is-frozen": 0,
+          "is-closing-only": "",
+        },
+      }),
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
+    expect(res.checksNotRun).toEqual(
+      expect.arrayContaining(["account_frozen", "account_closing_only"]),
+    );
+    expect(res.checksNotRun).not.toContain("account_margin_call");
+    expect(res.checksNotRun).not.toContain("account_risk_reducing_only");
   });
 });
 
@@ -1892,7 +2149,7 @@ describe("runSanityChecks — soft warnings", () => {
   it("warns when the account is in a margin call", async () => {
     const client = makeClient({
       limits: ALL_LIMITS,
-      status: { "account-number": ACCT, "is-in-margin-call": true },
+      status: { ...CLEAN_STATUS, "is-in-margin-call": true },
     });
     const res = await runSanityChecks(client, ACCT, equityLeg(1), cleanDryRun);
     expect(res.warnings.join(" ")).toMatch(/margin call/i);

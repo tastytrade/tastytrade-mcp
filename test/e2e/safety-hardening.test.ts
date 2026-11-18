@@ -1397,7 +1397,15 @@ describe("a submit the caller has stopped waiting for is not sent", () => {
       {
         matcher: POSITION_LIMIT,
         method: "GET",
-        reply: { data: { "account-number": ACCT } },
+        reply: {
+          data: {
+            "account-number": ACCT,
+            "equity-order-size": 1_000_000,
+            "equity-option-order-size": 1_000_000,
+            "future-order-size": 1_000_000,
+            "future-option-order-size": 1_000_000,
+          },
+        },
       },
       {
         matcher: TRADING_STATUS,

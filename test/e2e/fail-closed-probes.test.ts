@@ -72,6 +72,23 @@ function orderArgs(action: string, quantity = 1): Record<string, unknown> {
 const OPENING = orderArgs("Buy to Open");
 const CLOSING = orderArgs("Sell to Close");
 
+const COMPLEX_ORDERS_URL = `/accounts/${ACCT}/complex-orders`;
+function complexArgs(action: string): Record<string, unknown> {
+  const component = {
+    order_type: "Limit",
+    time_in_force: "Day",
+    price: "1.00",
+    price_effect: "Debit",
+    legs: [{ symbol: "AAPL", instrument_type: "Equity", action, quantity: 1 }],
+  };
+  return {
+    account_number: ACCT,
+    type: "OTO",
+    trigger_order: component,
+    orders: [component],
+  };
+}
+
 const EDIT_ARGS = {
   account_number: ACCT,
   order_id: ORDER_ID,
@@ -234,6 +251,20 @@ describe("a failed trading-status read", () => {
     ["a connection reset", { reply: { networkError: "ECONNRESET" } }],
     ["a null answer", raw(null)],
     ["an empty record", raw({})],
+    // Names the account and nothing else: the readable-record test passes, so
+    // this is the "no flag" path rather than the unnamed one that `{}` takes.
+    [
+      "a record naming the account with no flags",
+      healthy({ "account-number": ACCT }),
+    ],
+    [
+      "a record carrying only is-in-margin-call",
+      healthy({ "account-number": ACCT, "is-in-margin-call": false }),
+    ],
+    [
+      "a record whose is-frozen is not a boolean",
+      healthy({ ...CLEAN_STATUS, "is-frozen": "" }),
+    ],
     [
       "another account's record",
       healthy({ ...CLEAN_STATUS, "account-number": OTHER_ACCT }),
@@ -407,9 +438,127 @@ describe("the hint on a refused order names the cause", () => {
 
     expect(err.code).toBe("sanity_check_failed");
     expect(err.retryable).toBe(false);
+    // The 400 belongs to the token endpoint, and the refusal says so rather
+    // than blaming the position-limit read.
+    expect(err.message).toContain("the token grant failed, HTTP 400");
+    expect(err.message).not.toContain("(HTTP 400)");
+    expect(err.upstream).toEqual({ status: 400, code: "token_grant" });
     expect(err.hint).toContain("TASTYTRADE_REFRESH_TOKEN");
     expect(err.hint).toContain("dry_run");
     expect(err.hint?.endsWith(CLOSING_SENTENCE)).toBe(true);
     expect(orderPosts(h)).toHaveLength(0);
+  });
+});
+
+// ===========================================================================
+// T5. place_complex_order reads the same two records
+// ===========================================================================
+
+describe("place_complex_order on a failed probe", () => {
+  const refusedComplex = (harness: Harness, args: Record<string, unknown>) =>
+    refused(
+      harness,
+      "tastytrade_dry_run_complex_order",
+      "tastytrade_place_complex_order",
+      args,
+    );
+  const complexPosts = (harness: Harness) =>
+    harness.requests.filter(
+      (r) => r.method === "POST" && r.url === COMPLEX_ORDERS_URL,
+    );
+
+  it("refuses when the position-limit read fails, and sends nothing", async () => {
+    h = await createHarness({
+      routes: routes({ reply: { status: 503 } }, healthy(CLEAN_STATUS)),
+    });
+    const err = await refusedComplex(h, complexArgs("Buy to Open"));
+
+    expect(err.message).toContain("position limits");
+    expect(err.message).toContain("HTTP 503");
+    expect(err.upstream).toEqual({ status: 503 });
+    expect(complexPosts(h)).toHaveLength(0);
+  });
+
+  it("refuses when the trading status names another account", async () => {
+    h = await createHarness({
+      routes: routes(
+        healthy(ALL_LIMITS),
+        healthy({ ...CLEAN_STATUS, "account-number": OTHER_ACCT }),
+      ),
+    });
+    const err = await refusedComplex(h, complexArgs("Buy to Open"));
+
+    expect(err.message).toContain("trading status");
+    expect(err.message).not.toContain(OTHER_ACCT);
+    expect(complexPosts(h)).toHaveLength(0);
+  });
+
+  it("sends the same order when both reads are healthy", async () => {
+    // Control: only the probes differ from the refusals above.
+    h = await createHarness({
+      routes: routes(healthy(ALL_LIMITS), healthy(CLEAN_STATUS)),
+    });
+    const args = complexArgs("Buy to Open");
+    const token = await tokenFor(h, "tastytrade_dry_run_complex_order", args);
+    const res = await call(h, "tastytrade_place_complex_order", {
+      ...args,
+      confirmation_token: token,
+    });
+
+    expect(res.isError).toBe(false);
+    expect(complexPosts(h)).toHaveLength(1);
+  });
+
+  it("still sends an order whose every leg closes when the read fails, with the warning", async () => {
+    h = await createHarness({
+      routes: routes({ reply: { status: 503 } }, healthy(CLEAN_STATUS)),
+    });
+    const args = complexArgs("Sell to Close");
+    const token = await tokenFor(h, "tastytrade_dry_run_complex_order", args);
+    const res = await call(h, "tastytrade_place_complex_order", {
+      ...args,
+      confirmation_token: token,
+    });
+
+    expect(res.isError).toBe(false);
+    expect(res.body.sanity_warnings).toContain(
+      "Could not fetch account position limits — relying on server-side enforcement.",
+    );
+    expect(complexPosts(h)).toHaveLength(1);
+  });
+});
+
+// ===========================================================================
+// T6. A limits record that names the account but has no ceiling for the leg
+// ===========================================================================
+
+describe("a position-limit record with no ceiling for the leg's class", () => {
+  const NO_EQUITY_CEILING = {
+    "account-number": ACCT,
+    "future-order-size": 5,
+  };
+
+  it("refuses an opening order, however large, and sends nothing", async () => {
+    h = await createHarness({
+      routes: routes(healthy(NO_EQUITY_CEILING), healthy(CLEAN_STATUS)),
+    });
+    const err = await refusedPlace(h, orderArgs("Buy to Open", 1_000_000_000));
+
+    expect(err.message).toContain("no usable ceiling");
+    expect(err.hint).toContain("not a transient failure");
+    expect(err.hint?.endsWith(CLOSING_SENTENCE)).toBe(true);
+    expect(orderPosts(h)).toHaveLength(0);
+  });
+
+  it("sends a closing order with the warning", async () => {
+    h = await createHarness({
+      routes: routes(healthy(NO_EQUITY_CEILING), healthy(CLEAN_STATUS)),
+    });
+    const res = await placedClosing(h);
+
+    expect(res.sanity_warnings.join(" ")).toContain(
+      'no usable "equity-order-size"',
+    );
+    expect(orderPosts(h)).toHaveLength(1);
   });
 });

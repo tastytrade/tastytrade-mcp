@@ -94,6 +94,7 @@ const ORDER_ROUTES: Route[] = [
         "account-number": req.url.split("/")[2],
         "is-frozen": false,
         "is-closing-only": false,
+        "is-in-margin-call": false,
       },
     }),
   },

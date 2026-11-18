@@ -822,18 +822,33 @@ describe("sanity checks: per-leg position limits", () => {
     // per-leg loop and return an empty warnings array, so a response that had
     // checked nothing was indistinguishable from one that had checked and
     // approved. "We could not look" is not "we looked and it was fine".
+    //
+    // The warning is what an order that only closes gets; one that might open is
+    // refused (next case).
     h = await harnessFor({
       limits: { "account-number": ACCT, "future-order-size": 5 },
     });
     const warnings = await expectAllowed(
       h,
-      orderArgs([leg("AAPL", "Equity", "Buy to Open", 9_999)]),
+      orderArgs([leg("AAPL", "Equity", "Sell to Close", 9_999)]),
     );
     expect(warnings).toEqual([
       'Account position limits carry no usable "equity-order-size", so the ' +
         "matching leg(s) were not checked against a per-order size ceiling — " +
         "relying on server-side enforcement.",
     ]);
+  });
+
+  it("refuses an order that might open when the payload carries no ceiling for the leg's type", async () => {
+    h = await harnessFor({
+      limits: { "account-number": ACCT, "future-order-size": 5 },
+    });
+    const err = await expectBlocked(
+      h,
+      orderArgs([leg("AAPL", "Equity", "Buy to Open", 9_999)]),
+    );
+    expect(err.message).toContain("position limits");
+    expect(err.message).toContain("no usable ceiling");
   });
 
   it.each([
@@ -1154,7 +1169,7 @@ describe("sanity checks: soft conditions become warnings", () => {
 
   it("warns, and submits, when the account is in a margin call", async () => {
     h = await harnessFor({
-      status: { "account-number": ACCT, "is-in-margin-call": true },
+      status: { ...CLEAN_TRADING_STATUS, "is-in-margin-call": true },
     });
     const warnings = await expectAllowed(
       h,
@@ -1324,7 +1339,7 @@ describe("sanity checks: soft conditions become warnings", () => {
     h = await harnessFor({
       limitsUnreachable: true,
       status: {
-        "account-number": ACCT,
+        ...CLEAN_TRADING_STATUS,
         "is-closing-only": true,
         "is-in-margin-call": true,
       },

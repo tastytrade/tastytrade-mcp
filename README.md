@@ -344,8 +344,12 @@ The reason this project exists. In order of how much they protect you:
    refusal to send orders into frozen or closing-only accounts. Every result
    names the checks that did **not** run, so an empty warning list can never be
    mistaken for a completed check. If the account's position limits or trading
-   status cannot be read, or the answer is not that account's record, an order
-   that might open a position is refused; one whose every leg is Buy to Close or
+   status cannot be read, the answer is not that account's record, a limits
+   record has no ceiling for a leg's instrument class, or a trading status does
+   not carry a true or false value for `is-frozen`, `is-closing-only` and
+   `is-in-margin-call`, an order that might open a position is refused. Replace,
+   edit and edit-complex requests carry no legs, so they are refused whenever
+   the trading status read fails. An order whose every leg is Buy to Close or
    Sell to Close still goes ahead with a warning.
 3. **Credential-destination guard.** The refresh token and client secret are only
    sent to a recognised tastytrade host, over a channel that encrypts them. An
