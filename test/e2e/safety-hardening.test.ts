@@ -731,7 +731,7 @@ describe("a complex-order component that is not an order object", () => {
       {
         matcher: TRADING_STATUS,
         method: "GET",
-        reply: { data: { "account-number": ACCT } },
+        reply: { data: HEALTHY_TRADING_STATUS },
       },
     ];
   }
@@ -1402,7 +1402,7 @@ describe("a submit the caller has stopped waiting for is not sent", () => {
       {
         matcher: TRADING_STATUS,
         method: "GET",
-        reply: { data: { "account-number": ACCT } },
+        reply: { data: HEALTHY_TRADING_STATUS },
       },
       { matcher: ORDER_DRY_RUN, method: "POST", reply: { data: DRY_RUN } },
       {

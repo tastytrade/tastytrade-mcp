@@ -1073,9 +1073,10 @@ const TOKEN_SPENT_FATE: Readonly<Record<string, string>> = {
  * is already forced non-retryable WITH reconciliation advice by
  * `adaptRequestFailure`, which knows whether the request may have landed, and that
  * advice must not be overwritten with "re-run the dry-run". Nor can a
- * `runSanityChecks` failure arrive dressed as one of these — its reads swallow
- * their own failures into warnings and its hard blocks throw
- * `sanity_check_failed`.
+ * `runSanityChecks` failure arrive dressed as one of these — a failed account
+ * read is either refused with `sanity_check_failed` (the order might open a
+ * position) or turned into a warning (every leg closes), and its other hard
+ * blocks throw `sanity_check_failed` too.
  *
  * Returned through `sanitizedErrorResult`, never rethrown, because redaction is
  * deliberately not idempotent.

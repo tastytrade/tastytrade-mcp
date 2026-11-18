@@ -713,7 +713,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
       "accepts %s a hundred times over every ceiling, and says it did not check",
       async (instrumentType) => {
         const res = await runSanityChecks(
-          makeClient({ limits: TIGHT, status: { "account-number": ACCT } }),
+          makeClient({ limits: TIGHT, status: CLEAN_STATUS }),
           ACCT,
           legOf(instrumentType, 1_000),
           cleanDryRun,
@@ -739,7 +739,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
         // above it vacuous.
         const e = await captureRejection(
           runSanityChecks(
-            makeClient({ limits: TIGHT, status: { "account-number": ACCT } }),
+            makeClient({ limits: TIGHT, status: CLEAN_STATUS }),
             ACCT,
             legOf(instrumentType, 1_000),
             cleanDryRun,
@@ -1049,7 +1049,7 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
       const res = await runSanityChecks(
         makeClient({ limits: payload, status: CLEAN_STATUS }),
         ACCT,
-        equityLeg(1_000_000_000),
+        equityLeg(1_000_000_000, "Sell to Close"),
         cleanDryRun,
       );
       expect(res.warnings).toHaveLength(1);
@@ -1057,6 +1057,28 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
         `Account position limits came back ${shape}`,
       );
       expect(res.warnings[0]).toContain("relying on server-side enforcement");
+    },
+  );
+
+  it.each(UNREADABLE)(
+    "refuses an order that might open a position when the payload is %s",
+    async (_label, payload) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({ limits: payload, status: CLEAN_STATUS }),
+          ACCT,
+          equityLeg(1),
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      expect(e.toolError.retryable).toBe(false);
+      expect(e.toolError.message).toContain(
+        "the answer was not a readable record",
+      );
+      expect(e.toolError.message).toContain("position limits");
     },
   );
 
@@ -1457,12 +1479,32 @@ describe("runSanityChecks — a trading-status payload it cannot use", () => {
   ];
 
   it.each(UNREADABLE)(
+    "refuses an order that might open a position when the payload is %s",
+    async (_label, payload) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({ limits: ALL_LIMITS, status: payload }),
+          ACCT,
+          equityLeg(1),
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      expect(e.toolError.message).toContain(
+        "the answer was not a readable record",
+      );
+    },
+  );
+
+  it.each(UNREADABLE)(
     "warns rather than silently skipping the account-state checks when the payload is %s",
     async (_label, payload, shape) => {
       const res = await runSanityChecks(
         makeClient({ limits: ALL_LIMITS, status: payload }),
         ACCT,
-        equityLeg(1),
+        equityLeg(1, "Sell to Close"),
         cleanDryRun,
       );
       // Exactly one warning: nothing else in this order is unusual, so an empty
@@ -1545,7 +1587,7 @@ describe("runSanityChecks — a trading-status object carrying no account state"
       const res = await runSanityChecks(
         makeClient({ limits: ALL_LIMITS, status: payload }),
         ACCT,
-        equityLeg(1),
+        equityLeg(1, "Sell to Close"),
         cleanDryRun,
       );
       // An empty list is the defect: it is indistinguishable from an account
@@ -1554,6 +1596,24 @@ describe("runSanityChecks — a trading-status object carrying no account state"
       for (const flag of ACCOUNT_STATE_FLAGS) {
         expect(res.warnings[0]).toContain(flag);
       }
+    },
+  );
+
+  it.each(SAYS_NOTHING)(
+    "refuses an order that might open a position for %s",
+    async (_label, payload) => {
+      const e = await captureRejection(
+        runSanityChecks(
+          makeClient({ limits: ALL_LIMITS, status: payload }),
+          ACCT,
+          equityLeg(1),
+          cleanDryRun,
+        ),
+      );
+      if (!isToolErrorException(e))
+        throw new Error("expected ToolErrorException");
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      expect(e.toolError.message).toContain("trading status");
     },
   );
 
@@ -1839,14 +1899,26 @@ describe("runSanityChecks — soft warnings", () => {
   });
 
   it("warns (does not block) when the position-limit endpoint is unreachable", async () => {
+    // Warns only because every leg closes; an order that might open is refused
+    // (see "a failed account read" below).
     const client = makeClient({ limitErr: true, status: CLEAN_STATUS });
-    const res = await runSanityChecks(client, ACCT, equityLeg(1), cleanDryRun);
+    const res = await runSanityChecks(
+      client,
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
     expect(res.warnings.join(" ")).toMatch(/position limits/i);
   });
 
   it("warns when the trading-status endpoint is unreachable", async () => {
     const client = makeClient({ limits: ALL_LIMITS, statusErr: true });
-    const res = await runSanityChecks(client, ACCT, equityLeg(1), cleanDryRun);
+    const res = await runSanityChecks(
+      client,
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
     expect(res.warnings.join(" ")).toMatch(/trading status/i);
   });
 
@@ -2297,7 +2369,12 @@ describe("a stalled advisory read does not hold the submit open", () => {
     "gives up on %s after the budget and returns, warning about it",
     async (_label, which, expected) => {
       const out = await settleUnderFakeTimers(
-        runSanityChecks(stalledClient(which), ACCT, equityLeg(1), cleanDryRun),
+        runSanityChecks(
+          stalledClient(which),
+          ACCT,
+          equityLeg(1, "Sell to Close"),
+          cleanDryRun,
+        ),
       );
 
       expect(out.finished).toBe(true);
@@ -2318,11 +2395,16 @@ describe("a stalled advisory read does not hold the submit open", () => {
     // dry-run and needs no endpoint at all.
     process.env.MAX_ORDER_NOTIONAL_USD = "1000";
     const out = await settleUnderFakeTimers(
-      runSanityChecks(stalledClient("limits"), ACCT, equityLeg(1), {
-        errors: [],
-        warnings: [],
-        "buying-power-effect": { "change-in-buying-power": -50_000 },
-      }),
+      runSanityChecks(
+        stalledClient("limits"),
+        ACCT,
+        equityLeg(1, "Sell to Close"),
+        {
+          errors: [],
+          warnings: [],
+          "buying-power-effect": { "change-in-buying-power": -50_000 },
+        },
+      ),
     );
 
     expect(out.finished).toBe(true);
@@ -2331,6 +2413,40 @@ describe("a stalled advisory read does not hold the submit open", () => {
       throw new Error("expected ToolErrorException");
     expect(e.toolError.code).toBe("sanity_check_failed");
     expect(e.toolError.message).toMatch(/exceeds MAX_ORDER_NOTIONAL_USD/);
+  });
+
+  it("refuses an order that might open, with the transient hint, on a stalled position-limit read", async () => {
+    const out = await settleUnderFakeTimers(
+      runSanityChecks(stalledClient("limits"), ACCT, equityLeg(1), cleanDryRun),
+    );
+
+    expect(out.finished).toBe(true);
+    const e = out.error;
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.code).toBe("sanity_check_failed");
+    expect(e.toolError.retryable).toBe(false);
+    expect(e.toolError.message).toContain(
+      `no answer within ${ADVISORY_READ_BUDGET_MS}ms`,
+    );
+    expect(e.toolError.hint).toContain("transient");
+    expect(e.toolError.hint).toContain("dry_run");
+    expect(e.toolError.upstream).toBeUndefined();
+  });
+
+  it("refuses an order that might open on a stalled trading-status read", async () => {
+    const out = await settleUnderFakeTimers(
+      runSanityChecks(stalledClient("status"), ACCT, equityLeg(1), cleanDryRun),
+    );
+
+    expect(out.finished).toBe(true);
+    const e = out.error;
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    expect(e.toolError.message).toContain("trading status");
+    expect(e.toolError.message).toContain(
+      `no answer within ${ADVISORY_READ_BUDGET_MS}ms`,
+    );
   });
 
   it("does not wait on the budget when the reads answer", async () => {
@@ -2868,5 +2984,110 @@ describe("resolveTick — the two schedules band differently", () => {
         failureIsConclusive: false,
       });
     }
+  });
+});
+
+describe("runSanityChecks — a failed account read decides on the legs", () => {
+  const leg = (action: string, type = "Equity") => ({
+    "instrument-type": type,
+    symbol: "AAPL",
+    action,
+    quantity: 1,
+  });
+  const downClient = () => makeClient({ limitErr: true, status: CLEAN_STATUS });
+
+  async function outcomeFor(
+    legs: OutboundOrderBody["legs"],
+    client = downClient(),
+  ): Promise<{ refused: boolean; warnings: string[] }> {
+    try {
+      const res = await runSanityChecks(client, ACCT, { legs }, cleanDryRun);
+      return { refused: false, warnings: res.warnings };
+    } catch (e) {
+      if (!isToolErrorException(e)) throw e;
+      expect(e.toolError.code).toBe("sanity_check_failed");
+      return { refused: true, warnings: [] };
+    }
+  }
+
+  it.each([
+    ["no legs", []],
+    ["one opening leg", [leg("Buy to Open")]],
+    [
+      "a closing leg beside an opening one",
+      [leg("Sell to Close"), leg("Buy to Open")],
+    ],
+    ["an outright futures Buy", [leg("Buy", "Future")]],
+    ["an action that is not exactly a close", [leg("sell to close")]],
+  ])("refuses %s", async (_label, legs) => {
+    expect((await outcomeFor(legs)).refused).toBe(true);
+  });
+
+  it.each([
+    ["one closing leg", [leg("Sell to Close")]],
+    ["two closing legs", [leg("Sell to Close"), leg("Buy to Close")]],
+  ])("sends %s with the warning", async (_label, legs) => {
+    const out = await outcomeFor(legs);
+    expect(out.refused).toBe(false);
+    expect(out.warnings).toContain(
+      "Could not fetch account position limits — relying on server-side enforcement.",
+    );
+  });
+
+  it("tells a closing order that the limits record did not name its account", async () => {
+    const res = await runSanityChecks(
+      makeClient({
+        limits: { ...ALL_LIMITS, "account-number": "5WX99999" },
+        status: CLEAN_STATUS,
+      }),
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
+    expect(res.warnings).toEqual([
+      "Account position limits did not name this account, so no per-leg " +
+        "order-size ceiling could be applied — relying on server-side enforcement.",
+    ]);
+    expect(res.checksNotRun).toContain("per_leg_order_size");
+  });
+
+  it("does not apply another account's flags to a closing order", async () => {
+    // A frozen record that names someone else must not block this order, and
+    // must not count as a check that ran.
+    const res = await runSanityChecks(
+      makeClient({
+        limits: ALL_LIMITS,
+        status: {
+          ...CLEAN_STATUS,
+          "account-number": "5WX99999",
+          "is-frozen": true,
+        },
+      }),
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
+    expect(res.warnings).toHaveLength(1);
+    expect(res.warnings[0]).toContain("did not name this account");
+    expect(res.checksNotRun).toContain("account_frozen");
+  });
+
+  it("says nothing about the account number in the refusal", async () => {
+    const e = await captureRejection(
+      runSanityChecks(
+        makeClient({
+          limits: { ...ALL_LIMITS, "account-number": "5WX99999" },
+          status: CLEAN_STATUS,
+        }),
+        ACCT,
+        equityLeg(1),
+        cleanDryRun,
+      ),
+    );
+    if (!isToolErrorException(e))
+      throw new Error("expected ToolErrorException");
+    const text = JSON.stringify(e.toolError);
+    expect(text).not.toContain("5WX99999");
+    expect(text).not.toContain(ACCT);
   });
 });

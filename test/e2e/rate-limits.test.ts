@@ -682,7 +682,13 @@ describe("the order path pays for the requests it actually makes", () => {
     {
       matcher: /\/accounts\/[^/]+\/trading-status$/,
       method: "GET",
-      reply: (req) => ({ data: { "account-number": req.url.split("/")[2] } }),
+      reply: (req) => ({
+        data: {
+          "account-number": req.url.split("/")[2],
+          "is-frozen": false,
+          "is-closing-only": false,
+        },
+      }),
     },
   ];
 

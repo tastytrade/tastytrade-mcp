@@ -292,7 +292,11 @@ function stubClient(): { client: TastytradeClient; seen: string[] } {
         // an account that was checked and found healthy, so it warns. This stub
         // exists to keep the checks OUT of the way of whatever each case is
         // asserting, so it answers that one endpoint properly.
-        const data = TRADING_STATUS.test(url) ? CLEAN_TRADING_STATUS : {};
+        const data = TRADING_STATUS.test(url)
+          ? CLEAN_TRADING_STATUS
+          : POSITION_LIMIT.test(url)
+            ? ALL_LIMITS
+            : {};
         return {
           data: { data },
           status: 200,
@@ -846,7 +850,7 @@ describe("sanity checks: per-leg position limits", () => {
       h = await harnessFor({ limits: payload });
       const warnings = await expectAllowed(
         h,
-        orderArgs([leg("AAPL", "Equity", "Buy to Open", 9_999_999)]),
+        orderArgs([leg("AAPL", "Equity", "Sell to Close", 9_999_999)]),
       );
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain(
@@ -1160,12 +1164,15 @@ describe("sanity checks: soft conditions become warnings", () => {
   });
 
   it("warns, and submits, when the position-limit endpoint is unreachable", async () => {
+    // Every leg here closes, which is the only kind of order that still goes
+    // ahead on a failed read; an order that might open is refused (see
+    // fail-closed-probes.test.ts).
     h = await harnessFor({ limitsUnreachable: true });
     const warnings = await expectAllowed(
       h,
       // An oversized quantity sails through: with no limits fetched there is
       // nothing to compare against, so the API's own enforcement is the backstop.
-      orderArgs([leg("AAPL", "Equity", "Buy to Open", 100_000)]),
+      orderArgs([leg("AAPL", "Equity", "Sell to Close", 100_000)]),
     );
     expect(warnings).toContain(
       "Could not fetch account position limits — relying on server-side enforcement.",
@@ -1176,7 +1183,7 @@ describe("sanity checks: soft conditions become warnings", () => {
     h = await harnessFor({ statusUnreachable: true });
     const warnings = await expectAllowed(
       h,
-      orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
+      orderArgs([leg("AAPL", "Equity", "Sell to Close", 1)]),
     );
     expect(warnings).toContain(
       "Could not fetch account trading status — submit may still bounce upstream.",
@@ -1200,7 +1207,7 @@ describe("sanity checks: soft conditions become warnings", () => {
       h = await harnessFor({ status: payload });
       const warnings = await expectAllowed(
         h,
-        orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
+        orderArgs([leg("AAPL", "Equity", "Sell to Close", 1)]),
       );
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain(
@@ -1211,18 +1218,23 @@ describe("sanity checks: soft conditions become warnings", () => {
   );
 
   it.each([
-    ["an empty object", {}],
-    ["a body carrying only identity fields", { "account-number": ACCT }],
+    ["an empty object", {}, /did not name this account/],
+    [
+      "a body carrying only identity fields",
+      { "account-number": ACCT },
+      /carried no readable/,
+    ],
     // The expensive one: the account IS frozen, and the flag is one level
     // deeper than the checks look. Through the real dispatcher this submitted a
     // live order into a frozen account and reported `sanity_warnings: []`.
     [
       "an envelope skew nesting the status a level down",
       { "account-number": ACCT, "trading-status": { "is-frozen": true } },
+      /carried no readable/,
     ],
   ])(
     "warns, and submits, when the trading-status payload is %s",
-    async (_label, payload) => {
+    async (_label, payload, wording) => {
       // One level in from the shape cases above. These payloads ARE objects, so
       // they clear the shape guard, and then every flag read comes back
       // undefined and the account reports healthy. The vendored spec says a
@@ -1232,10 +1244,10 @@ describe("sanity checks: soft conditions become warnings", () => {
       h = await harnessFor({ status: payload });
       const warnings = await expectAllowed(
         h,
-        orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
+        orderArgs([leg("AAPL", "Equity", "Sell to Close", 1)]),
       );
       expect(warnings).toHaveLength(1);
-      expect(warnings[0]).toMatch(/carried no readable/);
+      expect(warnings[0]).toMatch(wording);
       for (const flag of [
         "is-frozen",
         "is-closing-only",

@@ -832,6 +832,7 @@ describe("a timeout on a write", () => {
   it("applies to a PUT (replace)", async () => {
     h = await createHarness({
       routes: [
+        ...sanityRoutes(),
         {
           matcher: ORDER_DRY_RUN_BY_ID,
           method: "POST",
@@ -862,6 +863,7 @@ describe("a timeout on a write", () => {
   it("applies to a PATCH (edit)", async () => {
     h = await createHarness({
       routes: [
+        ...sanityRoutes(),
         {
           matcher: ORDER_DRY_RUN_BY_ID,
           method: "POST",
@@ -2140,7 +2142,13 @@ describe("a submit whose 2xx carries no order", () => {
       {
         matcher: /\/accounts\/[^/]+\/trading-status$/,
         method: "GET",
-        reply: (req) => ({ data: { "account-number": req.url.split("/")[2] } }),
+        reply: (req) => ({
+          data: {
+            "account-number": req.url.split("/")[2],
+            "is-frozen": false,
+            "is-closing-only": false,
+          },
+        }),
       },
       {
         matcher: `/accounts/${ACCT}/orders/dry-run`,

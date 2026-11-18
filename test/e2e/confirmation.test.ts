@@ -764,7 +764,14 @@ describe("single use", () => {
       {
         matcher: TRADING_STATUS_URL,
         method: "GET",
-        reply: { data: { "account-number": ACCT } },
+        reply: {
+          data: {
+            "account-number": ACCT,
+            "is-frozen": false,
+            "is-closing-only": false,
+            "is-in-margin-call": false,
+          },
+        },
       },
     ]);
 
@@ -1866,7 +1873,14 @@ describe("complex orders", () => {
       {
         matcher: TRADING_STATUS_URL,
         method: "GET",
-        reply: { data: { "account-number": ACCT } },
+        reply: {
+          data: {
+            "account-number": ACCT,
+            "is-frozen": false,
+            "is-closing-only": false,
+            "is-in-margin-call": false,
+          },
+        },
       },
     ]);
 
@@ -2171,8 +2185,18 @@ describe("a still-repeatable failure on the live write, after the token has been
      * forces every other write failure non-retryable first. So it is injected at the seam
      * it really comes from.
      */
+    //
+    // The three account reads place_order makes before the POST (position limits,
+    // the instrument's tick schedule, trading status) each fetch a bearer too, and
+    // a failed grant on one of them would refuse the order before any write. They
+    // are let through, so it is the fourth grant, the POST's own, that fails.
     let grantWorks = true;
+    let readGrantsLeft = 3;
     const h = await boot(orderRoutes(), () => {
+      if (!grantWorks && readGrantsLeft > 0) {
+        readGrantsLeft -= 1;
+        return "test-access-token";
+      }
       if (!grantWorks) {
         throw toolError({
           code: "upstream_error",
@@ -2275,6 +2299,9 @@ describe("a still-repeatable failure on the live write, after the token has been
 // ---------------------------------------------------------------------------
 
 const TARGET_ROUTES: Route[] = [
+  // Ahead of the catch-all below, which would otherwise answer these two reads
+  // with a dry-run body that names no account.
+  ...accountStateRoutes(),
   {
     matcher: /^\/accounts\/[^?]*$/,
     reply: {
@@ -2285,7 +2312,6 @@ const TARGET_ROUTES: Route[] = [
       },
     },
   },
-  ...accountStateRoutes(),
 ];
 
 const REPLACE_ARGS = {

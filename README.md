@@ -343,7 +343,10 @@ The reason this project exists. In order of how much they protect you:
    published order-size ceilings, a notional cap on buying-power impact, and a
    refusal to send orders into frozen or closing-only accounts. Every result
    names the checks that did **not** run, so an empty warning list can never be
-   mistaken for a completed check.
+   mistaken for a completed check. If the account's position limits or trading
+   status cannot be read, or the answer is not that account's record, an order
+   that might open a position is refused; one whose every leg is Buy to Close or
+   Sell to Close still goes ahead with a warning.
 3. **Credential-destination guard.** The refresh token and client secret are only
    sent to a recognised tastytrade host, over a channel that encrypts them. An
    unrecognised host stops the server rather than warning it.
