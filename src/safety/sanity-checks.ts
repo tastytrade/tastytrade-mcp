@@ -1236,20 +1236,6 @@ function causeStatus(cause: unknown): number | undefined {
   return typeof status === "number" && status > 0 ? status : undefined;
 }
 
-/**
- * Did the failure come from the credential exchange rather than from the read?
- *
- * The request interceptor fetches the access token before the read goes out and
- * throws a finished ToolError when that fails, so the status it carries belongs
- * to the token endpoint. The read's own failure is an axios error carrying
- * `.response`. A `validation` refusal is the other ToolError the client throws
- * before sending (a value that cannot be written into the path); it is not a
- * grant failure and is left to the generic wording.
- */
-function isGrantFailure(cause: unknown): boolean {
-  return isToolErrorException(cause) && cause.toolError.code !== "validation";
-}
-
 /** The parenthesised reason in the refusal message. Never broker text. */
 function probeReason(failure: ProbeFailure): string {
   switch (failure.kind) {
@@ -1265,11 +1251,6 @@ function probeReason(failure: ProbeFailure): string {
       return "the answer carried no usable ceiling for an instrument class this order trades";
     case "threw": {
       const status = causeStatus(failure.cause);
-      if (isGrantFailure(failure.cause)) {
-        return status === undefined
-          ? "the token grant failed"
-          : `the token grant failed, HTTP ${status}`;
-      }
       return status === undefined ? "no HTTP response" : `HTTP ${status}`;
     }
   }
@@ -1279,11 +1260,14 @@ function probeReason(failure: ProbeFailure): string {
  * What to tell the agent to do next. First match wins, and every hint ends with
  * the closing-order sentence.
  *
- * A grant failure and a failure of the read itself are told apart by shape: the
- * request interceptor throws a finished ToolError when the credential exchange
- * fails, and the read's own failure is an axios error carrying `.response`. A
- * 403 on the read means this login may not read this account's records, which
- * is not a reason to touch credentials.
+ * A failed credential exchange and a failure of the read itself are not told
+ * apart. The API client's own finished ToolErrors (a proxy page answered 200, a
+ * local size or time bound, a transport timeout) carry the same codes as the
+ * OAuth client's grant failures, so the code cannot separate them, and a wrong
+ * label would send an operator to the credentials for a fault elsewhere. Every
+ * failure is reported as a failed read with the status it carried. A 403 on the
+ * read means this login may not read this account's records, which is not a
+ * reason to touch credentials.
  */
 function probeHint(
   name: ProbeName,
@@ -1326,9 +1310,8 @@ function probeHint(
   const adapted = adaptError(cause);
   if (adapted.retryable) {
     const wait = retryAfterMs === undefined ? "" : ` (after ${retryAfterMs}ms)`;
-    const failed = isGrantFailure(cause) ? "The token grant" : "The read";
     return (
-      `${failed} failed in a way that is usually transient: ${twin} later${wait} ` +
+      `The read failed in a way that is usually transient: ${twin} later${wait} ` +
       `for a fresh token. ${CLOSING_ORDERS_STILL_GO}`
     );
   }
@@ -1373,10 +1356,7 @@ function probeHint(
  * The refusal for an order that might open a position when an account read
  * failed. `retryable: false` because the token is spent: repeating this call
  * cannot work, a new dry-run is what is needed. `upstream` carries the status
- * only, never the body, and nothing here echoes the account number. When the
- * credential exchange failed rather than the read, `upstream.code` is
- * "token_grant" and the message says so, because the status is the token
- * endpoint's.
+ * only, never the body, and nothing here echoes the account number.
  */
 function probeRefusal(
   name: ProbeName,
@@ -1395,20 +1375,7 @@ function probeRefusal(
       `was spent before the request went out.`,
     retryable: false,
     ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
-    ...(status === undefined
-      ? {}
-      : {
-          // When the credential exchange failed, the status is the token
-          // endpoint's, not the read's; `code` says so rather than leaving a
-          // reader to take it for the answer to the position-limit or
-          // trading-status request.
-          upstream: {
-            status,
-            ...(failure.kind === "threw" && isGrantFailure(failure.cause)
-              ? { code: "token_grant" }
-              : {}),
-          },
-        }),
+    ...(status === undefined ? {} : { upstream: { status } }),
     hint: probeHint(name, failure, retryAfterMs),
   });
 }
@@ -1912,10 +1879,11 @@ export async function runSanityChecks(
               `so no per-leg order-size ceiling could be applied — ${SERVER_SIDE_BACKSTOP}`,
     );
   } else {
-    // Fetched, readable and this account's, so the ceiling was applied to every
-    // leg the payload publishes one for. The per-type gaps below are reported
-    // individually; the check itself ran.
-    ran.add("per_leg_order_size");
+    // Fetched, readable and this account's, so the ceiling is applied to every
+    // leg the payload publishes one for. The check is recorded as run after
+    // the loop, and only when no leg was skipped for want of a ceiling: a closing
+    // leg whose class has no usable ceiling went unchecked, and
+    // `checks_not_run` is the authoritative list of that.
     const limits = rawLimits as PositionLimit;
     // Reported once per distinct gap rather than once per leg: a four-leg
     // order missing one ceiling is one fact, not four.
@@ -1962,6 +1930,7 @@ export async function runSanityChecks(
       }
     }
 
+    if (unusableFields.size === 0) ran.add("per_leg_order_size");
     for (const field of unusableFields) {
       warnings.push(
         `Account position limits carry no usable "${field}", so the matching ` +

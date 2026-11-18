@@ -1177,6 +1177,48 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
         "matching leg(s) were not checked against a per-order size ceiling — " +
         "relying on server-side enforcement.",
     ]);
+    // The check was skipped for the leg, so it is disclosed as not run, and a
+    // record that does carry the ceiling lists it as run.
+    expect(res.checksNotRun).toContain("per_leg_order_size");
+    const withCeiling = await runSanityChecks(
+      makeClient({
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
+        status: CLEAN_STATUS,
+      }),
+      ACCT,
+      equityLeg(1, "Sell to Close"),
+      cleanDryRun,
+    );
+    expect(withCeiling.checksNotRun).not.toContain("per_leg_order_size");
+  });
+
+  it("discloses per_leg_order_size as not run when only one closing leg of a mixed order lacks its ceiling", async () => {
+    const res = await runSanityChecks(
+      makeClient({
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
+        status: CLEAN_STATUS,
+      }),
+      ACCT,
+      {
+        legs: [
+          {
+            "instrument-type": "Equity",
+            symbol: "AAPL",
+            action: "Buy to Open",
+            quantity: 1,
+          },
+          {
+            "instrument-type": "Future Option",
+            symbol: "./ESZ6 A",
+            action: "Sell to Close",
+            quantity: 1,
+          },
+        ],
+      },
+      cleanDryRun,
+    );
+    expect(res.warnings.join(" ")).toContain('"future-option-order-size"');
+    expect(res.checksNotRun).toContain("per_leg_order_size");
   });
 
   it("names each missing ceiling once, however many legs needed it", async () => {

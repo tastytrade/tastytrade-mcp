@@ -242,6 +242,31 @@ describe("a failed position-limit read", () => {
   });
 });
 
+describe("a closing order whose limits record has no ceiling for its class", () => {
+  it("goes ahead with the warning and lists per_leg_order_size as not run", async () => {
+    h = await createHarness({
+      routes: routes(
+        healthy({ "account-number": ACCT, "future-order-size": 5 }),
+        healthy(CLEAN_STATUS),
+      ),
+    });
+    const res = await placedClosing(h);
+
+    expect(res.sanity_warnings.join(" ")).toContain('"equity-order-size"');
+    expect(res.checks_not_run).toContain("per_leg_order_size");
+    expect(orderPosts(h)).toHaveLength(1);
+  });
+
+  it("lists it as run when the record carries the ceiling", async () => {
+    h = await createHarness({
+      routes: routes(healthy(ALL_LIMITS), healthy(CLEAN_STATUS)),
+    });
+    const res = await placedClosing(h);
+
+    expect(res.checks_not_run).not.toContain("per_leg_order_size");
+  });
+});
+
 // ===========================================================================
 // T2. The trading-status read fails, on every route that reads it
 // ===========================================================================
@@ -410,10 +435,12 @@ describe("the hint on a refused order names the cause", () => {
     expect(err.hint?.endsWith(CLOSING_SENTENCE)).toBe(true);
   });
 
-  it("points a failed credential exchange at the credentials", async () => {
+  it("reports a failed credential exchange as a failed read, with the hint the client gave", async () => {
     // The grant works for the dry-run and fails on the first read of the submit,
     // which is the request interceptor throwing a finished ToolError rather than
-    // the read answering.
+    // the read answering. The API client's own finished ToolErrors for a read
+    // carry the same codes, so the two are not told apart: the refusal says the
+    // read could not be completed and carries the status, nothing more.
     let grantWorks = true;
     h = await createHarness({
       routes: routes(healthy(ALL_LIMITS), healthy(CLEAN_STATUS)),
@@ -438,16 +465,63 @@ describe("the hint on a refused order names the cause", () => {
 
     expect(err.code).toBe("sanity_check_failed");
     expect(err.retryable).toBe(false);
-    // The 400 belongs to the token endpoint, and the refusal says so rather
-    // than blaming the position-limit read.
-    expect(err.message).toContain("the token grant failed, HTTP 400");
-    expect(err.message).not.toContain("(HTTP 400)");
-    expect(err.upstream).toEqual({ status: 400, code: "token_grant" });
+    expect(err.message).toContain("(HTTP 400)");
+    expect(err.upstream).toEqual({ status: 400 });
     expect(err.hint).toContain("TASTYTRADE_REFRESH_TOKEN");
     expect(err.hint).toContain("dry_run");
     expect(err.hint?.endsWith(CLOSING_SENTENCE)).toBe(true);
     expect(orderPosts(h)).toHaveLength(0);
   });
+});
+
+// ===========================================================================
+// T4b. A read the API client itself gave up on is not a token-grant failure
+// ===========================================================================
+
+describe("a read failure the client reports as a finished error", () => {
+  // The body goes out as given, not inside the `{data: ...}` envelope, which
+  // is what a proxy page or an empty reply looks like on the wire.
+  const bare = (body: string): Reply => ({ reply: { raw: true, data: body } });
+
+  // Each of these makes the API client throw its own finished ToolError for
+  // the read (a 2xx that is not JSON, or a transport abort), which carries a
+  // code the OAuth client also uses for its grant failures.
+  const CASES: Array<[string, Reply, Reply, string]> = [
+    [
+      "a 200 HTML page on trading-status",
+      healthy(ALL_LIMITS),
+      bare("<html>proxy</html>"),
+      "trading status",
+    ],
+    [
+      "a 200 with an empty body on position-limit",
+      bare(""),
+      healthy(CLEAN_STATUS),
+      "position limits",
+    ],
+    [
+      "an ECONNABORTED on position-limit",
+      { reply: { networkError: "ECONNABORTED" } },
+      healthy(CLEAN_STATUS),
+      "position limits",
+    ],
+  ];
+
+  it.each(CASES)(
+    "does not blame the token grant for %s",
+    async (_label, limits, status, probe) => {
+      h = await createHarness({ routes: routes(limits, status) });
+      const err = await refusedPlace(h);
+
+      expect(err.message).toContain(`read the account's ${probe}`);
+      expect(err.message).not.toContain("token grant");
+      expect(err.hint ?? "").not.toContain("token grant");
+      expect(err.hint ?? "").not.toContain("The token");
+      expect(err.upstream?.code).toBeUndefined();
+      expect(err.hint?.endsWith(CLOSING_SENTENCE)).toBe(true);
+      expect(orderPosts(h)).toHaveLength(0);
+    },
+  );
 });
 
 // ===========================================================================
