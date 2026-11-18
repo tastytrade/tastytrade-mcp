@@ -31,6 +31,8 @@ const REPO_ROOT = path.resolve(
   "..",
 );
 
+const ACCT = "5WX34382";
+
 /**
  * A position-limit payload carrying every published ceiling, generously sized.
  *
@@ -40,6 +42,7 @@ const REPO_ROOT = path.resolve(
  * order and drown the warning each of those tests is actually asserting.
  */
 const ALL_LIMITS = {
+  "account-number": ACCT,
   "equity-order-size": 1_000_000,
   "equity-option-order-size": 1_000_000,
   "future-order-size": 1_000_000,
@@ -59,6 +62,7 @@ const ALL_LIMITS = {
  * whatever each of those tests is actually asserting.
  */
 const CLEAN_STATUS = {
+  "account-number": ACCT,
   "is-frozen": false,
   "is-closing-only": false,
   "is-in-margin-call": false,
@@ -113,8 +117,6 @@ const AAPL_INSTRUMENT = {
   "tick-sizes": [{ value: "0.01" }],
   "option-tick-sizes": [{ threshold: "3.0", value: "0.05" }, { value: "0.1" }],
 };
-
-const ACCT = "5WX34382";
 
 /**
  * The client `runStoredDryRunChecks` now needs. the three
@@ -193,7 +195,9 @@ describe("runSanityChecks — hard blocks", () => {
   });
 
   it("throws when an equity leg quantity exceeds equity-order-size", async () => {
-    const client = makeClient({ limits: { "equity-order-size": 100 } });
+    const client = makeClient({
+      limits: { "account-number": ACCT, "equity-order-size": 100 },
+    });
     const e = await captureRejection(
       runSanityChecks(client, ACCT, equityLeg(200), cleanDryRun),
     );
@@ -204,7 +208,11 @@ describe("runSanityChecks — hard blocks", () => {
 
   it("uses equity-option-order-size for option legs", async () => {
     const client = makeClient({
-      limits: { "equity-option-order-size": 5, "equity-order-size": 10_000 },
+      limits: {
+        "account-number": ACCT,
+        "equity-option-order-size": 5,
+        "equity-order-size": 10_000,
+      },
     });
     const args: OutboundOrderBody = {
       legs: [
@@ -266,7 +274,7 @@ describe("runSanityChecks — hard blocks", () => {
   it("refuses orders into a frozen account", async () => {
     const client = makeClient({
       limits: ALL_LIMITS,
-      status: { "is-frozen": true },
+      status: { "account-number": ACCT, "is-frozen": true },
     });
     const e = await captureRejection(
       runSanityChecks(client, ACCT, equityLeg(1), cleanDryRun),
@@ -281,7 +289,7 @@ describe("runSanityChecks — hard blocks", () => {
   it("refuses opening orders into a closing-only account", async () => {
     const client = makeClient({
       limits: ALL_LIMITS,
-      status: { "is-closing-only": true },
+      status: { "account-number": ACCT, "is-closing-only": true },
     });
     const e = await captureRejection(
       runSanityChecks(client, ACCT, equityLeg(1, "Buy to Open"), cleanDryRun),
@@ -296,7 +304,9 @@ describe("runSanityChecks — hard blocks", () => {
   });
 
   it("flattens complex-order legs (orders[]) for the position-limit check", async () => {
-    const client = makeClient({ limits: { "equity-order-size": 50 } });
+    const client = makeClient({
+      limits: { "account-number": ACCT, "equity-order-size": 50 },
+    });
     const args: OutboundOrderBody = {
       orders: [
         {
@@ -342,6 +352,7 @@ describe("runSanityChecks — hard blocks", () => {
 
 describe("runSanityChecks — which order-size ceiling applies", () => {
   const SPREAD = {
+    "account-number": ACCT,
     "equity-order-size": 100_000,
     "equity-option-order-size": 2_000,
     "future-order-size": 50,
@@ -445,7 +456,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
     // raise in order to buy crypto.
     const res = await runSanityChecks(
       makeClient({
-        limits: { "equity-order-size": 100 },
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
         status: CLEAN_STATUS,
       }),
       ACCT,
@@ -691,6 +702,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
      * which is the whole point of asserting it this way.
      */
     const TIGHT = {
+      "account-number": ACCT,
       "equity-order-size": 10,
       "equity-option-order-size": 10,
       "future-order-size": 10,
@@ -701,7 +713,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
       "accepts %s a hundred times over every ceiling, and says it did not check",
       async (instrumentType) => {
         const res = await runSanityChecks(
-          makeClient({ limits: TIGHT, status: {} }),
+          makeClient({ limits: TIGHT, status: { "account-number": ACCT } }),
           ACCT,
           legOf(instrumentType, 1_000),
           cleanDryRun,
@@ -727,7 +739,7 @@ describe("runSanityChecks — which order-size ceiling applies", () => {
         // above it vacuous.
         const e = await captureRejection(
           runSanityChecks(
-            makeClient({ limits: TIGHT, status: {} }),
+            makeClient({ limits: TIGHT, status: { "account-number": ACCT } }),
             ACCT,
             legOf(instrumentType, 1_000),
             cleanDryRun,
@@ -756,8 +768,8 @@ describe("runSanityChecks — an unreadable leg action at the closing-only gate"
     const e = await captureRejection(
       runSanityChecks(
         makeClient({
-          limits: { "equity-order-size": 100_000 },
-          status: { "is-closing-only": true },
+          limits: { "account-number": ACCT, "equity-order-size": 100_000 },
+          status: { "account-number": ACCT, "is-closing-only": true },
         }),
         ACCT,
         {
@@ -784,8 +796,8 @@ describe("runSanityChecks — an unreadable leg action at the closing-only gate"
     // exactly the one that needs to be able to close.
     const res = await runSanityChecks(
       makeClient({
-        limits: { "equity-order-size": 100_000 },
-        status: { "is-closing-only": true },
+        limits: { "account-number": ACCT, "equity-order-size": 100_000 },
+        status: { "account-number": ACCT, "is-closing-only": true },
       }),
       ACCT,
       {
@@ -813,7 +825,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
         runSanityChecks(
           makeClient({
             limits: ALL_LIMITS,
-            status: { "is-closing-only": true },
+            status: { "account-number": ACCT, "is-closing-only": true },
           }),
           ACCT,
           {
@@ -845,7 +857,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
       const res = await runSanityChecks(
         makeClient({
           limits: ALL_LIMITS,
-          status: { "is-closing-only": true },
+          status: { "account-number": ACCT, "is-closing-only": true },
         }),
         ACCT,
         {
@@ -862,7 +874,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
       runSanityChecks(
         makeClient({
           limits: ALL_LIMITS,
-          status: { "is-closing-only": true },
+          status: { "account-number": ACCT, "is-closing-only": true },
         }),
         ACCT,
         {
@@ -896,7 +908,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
         runSanityChecks(
           makeClient({
             limits: ALL_LIMITS,
-            status: { "is-closing-only": true },
+            status: { "account-number": ACCT, "is-closing-only": true },
           }),
           ACCT,
           {
@@ -929,7 +941,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
       runSanityChecks(
         makeClient({
           limits: ALL_LIMITS,
-          status: { "is-closing-only": true },
+          status: { "account-number": ACCT, "is-closing-only": true },
         }),
         ACCT,
         { legs },
@@ -996,7 +1008,7 @@ describe("runSanityChecks — the closing-only gate and the action text", () => 
       runSanityChecks(
         makeClient({
           limits: ALL_LIMITS,
-          status: { "is-closing-only": true },
+          status: { "account-number": ACCT, "is-closing-only": true },
         }),
         ACCT,
         {
@@ -1052,7 +1064,7 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
     // `{}` is an ordinary upstream outcome, and it would read exactly like a
     // successful check.
     const res = await runSanityChecks(
-      makeClient({ limits: {}, status: CLEAN_STATUS }),
+      makeClient({ limits: { "account-number": ACCT }, status: CLEAN_STATUS }),
       ACCT,
       equityLeg(1_000_000_000),
       cleanDryRun,
@@ -1067,7 +1079,7 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
   it("names each missing ceiling once, however many legs needed it", async () => {
     const res = await runSanityChecks(
       makeClient({
-        limits: { "equity-order-size": 100 },
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
         status: CLEAN_STATUS,
       }),
       ACCT,
@@ -1111,7 +1123,9 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
       // for that leg without saying so.
       const e = await captureRejection(
         runSanityChecks(
-          makeClient({ limits: { "equity-order-size": limit } }),
+          makeClient({
+            limits: { "account-number": ACCT, "equity-order-size": limit },
+          }),
           ACCT,
           equityLeg(101),
           cleanDryRun,
@@ -1129,7 +1143,9 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
     // "no limit configured" would invert the check.
     const e = await captureRejection(
       runSanityChecks(
-        makeClient({ limits: { "equity-order-size": 0 } }),
+        makeClient({
+          limits: { "account-number": ACCT, "equity-order-size": 0 },
+        }),
         ACCT,
         equityLeg(1),
         cleanDryRun,
@@ -1154,7 +1170,7 @@ describe("runSanityChecks — a position-limit payload it cannot use", () => {
     async (_label, limit) => {
       const res = await runSanityChecks(
         makeClient({
-          limits: { "equity-order-size": limit },
+          limits: { "account-number": ACCT, "equity-order-size": limit },
           status: CLEAN_STATUS,
         }),
         ACCT,
@@ -1234,7 +1250,9 @@ describe("runSanityChecks — unusable leg quantities", () => {
   it.each(UNUSABLE)(
     "refuses %s rather than comparing it to nothing",
     async (_label, quantity) => {
-      const client = makeClient({ limits: { "equity-order-size": 100 } });
+      const client = makeClient({
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
+      });
       const e = await captureRejection(
         runSanityChecks(client, ACCT, legWithQuantity(quantity), cleanDryRun),
       );
@@ -1280,7 +1298,7 @@ describe("runSanityChecks — unusable leg quantities", () => {
   ])("still accepts %s", async (_label, quantity) => {
     const res = await runSanityChecks(
       makeClient({
-        limits: { "equity-order-size": 100 },
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
         status: CLEAN_STATUS,
       }),
       ACCT,
@@ -1296,7 +1314,9 @@ describe("runSanityChecks — unusable leg quantities", () => {
     // as a malformed one.
     const e = await captureRejection(
       runSanityChecks(
-        makeClient({ limits: { "equity-order-size": 100 } }),
+        makeClient({
+          limits: { "account-number": ACCT, "equity-order-size": 100 },
+        }),
         ACCT,
         legWithQuantity("200"),
         cleanDryRun,
@@ -1317,7 +1337,7 @@ describe("runSanityChecks — unusable leg quantities", () => {
     // what bounds such an order.
     const res = await runSanityChecks(
       makeClient({
-        limits: { "equity-order-size": 100 },
+        limits: { "account-number": ACCT, "equity-order-size": 100 },
         status: CLEAN_STATUS,
       }),
       ACCT,
@@ -1468,7 +1488,10 @@ describe("runSanityChecks — a trading-status payload it cannot use", () => {
     // The guard must sit in FRONT of the hard block, not replace it.
     const e = await captureRejection(
       runSanityChecks(
-        makeClient({ limits: ALL_LIMITS, status: { "is-frozen": true } }),
+        makeClient({
+          limits: ALL_LIMITS,
+          status: { "account-number": ACCT, "is-frozen": true },
+        }),
         ACCT,
         equityLeg(1),
         cleanDryRun,
@@ -1499,6 +1522,7 @@ describe("runSanityChecks — a trading-status object carrying no account state"
     [
       "a body of nulls",
       {
+        "account-number": ACCT,
         "is-frozen": null,
         "is-closing-only": null,
         "is-in-margin-call": null,
@@ -1511,7 +1535,7 @@ describe("runSanityChecks — a trading-status object carrying no account state"
     // A frozen account walking through the HARD BLOCK and reporting nothing.
     [
       "an envelope skew nesting the real status a level down",
-      { "trading-status": { "is-frozen": true } },
+      { "account-number": ACCT, "trading-status": { "is-frozen": true } },
     ],
   ];
 
@@ -1539,7 +1563,10 @@ describe("runSanityChecks — a trading-status object carrying no account state"
     // per absent flag would fire on nearly every order placed and stop being
     // read at all.
     const res = await runSanityChecks(
-      makeClient({ limits: ALL_LIMITS, status: { "is-frozen": false } }),
+      makeClient({
+        limits: ALL_LIMITS,
+        status: { "account-number": ACCT, "is-frozen": false },
+      }),
       ACCT,
       equityLeg(1),
       cleanDryRun,
@@ -1791,7 +1818,7 @@ describe("runSanityChecks — soft warnings", () => {
   it("warns (does not block) when closing-only and the order is closing", async () => {
     const client = makeClient({
       limits: ALL_LIMITS,
-      status: { "is-closing-only": true },
+      status: { "account-number": ACCT, "is-closing-only": true },
     });
     const res = await runSanityChecks(
       client,
@@ -1805,7 +1832,7 @@ describe("runSanityChecks — soft warnings", () => {
   it("warns when the account is in a margin call", async () => {
     const client = makeClient({
       limits: ALL_LIMITS,
-      status: { "is-in-margin-call": true },
+      status: { "account-number": ACCT, "is-in-margin-call": true },
     });
     const res = await runSanityChecks(client, ACCT, equityLeg(1), cleanDryRun);
     expect(res.warnings.join(" ")).toMatch(/margin call/i);
@@ -2216,7 +2243,9 @@ describe("a stalled advisory read does not hold the submit open", () => {
         which === "limits" ? never() : Promise.resolve(ALL_LIMITS),
       ),
       getAccountStatus: jest.fn(() =>
-        which === "status" ? never() : Promise.resolve({}),
+        which === "status"
+          ? never()
+          : Promise.resolve({ "account-number": ACCT }),
       ),
     } as unknown as TastytradeClient;
   }

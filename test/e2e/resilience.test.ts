@@ -243,6 +243,7 @@ function sanityRoutes(): Route[] {
       method: "GET",
       reply: {
         data: {
+          "account-number": ACCT,
           "equity-order-size": 100,
           "equity-option-order-size": 100,
           "future-order-size": 100,
@@ -253,7 +254,11 @@ function sanityRoutes(): Route[] {
       matcher: `/accounts/${ACCT}/trading-status`,
       method: "GET",
       reply: {
-        data: { "is-frozen": false, "is-closing-only": false },
+        data: {
+          "account-number": ACCT,
+          "is-frozen": false,
+          "is-closing-only": false,
+        },
       },
     },
   ];
@@ -2130,12 +2135,12 @@ describe("a submit whose 2xx carries no order", () => {
       {
         matcher: /\/accounts\/[^/]+\/position-limit$/,
         method: "GET",
-        reply: { data: {} },
+        reply: (req) => ({ data: { "account-number": req.url.split("/")[2] } }),
       },
       {
         matcher: /\/accounts\/[^/]+\/trading-status$/,
         method: "GET",
-        reply: { data: {} },
+        reply: (req) => ({ data: { "account-number": req.url.split("/")[2] } }),
       },
       {
         matcher: `/accounts/${ACCT}/orders/dry-run`,

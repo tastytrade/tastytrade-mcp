@@ -107,6 +107,7 @@ function dryRunBody(
  * warning to every order in the file and drown the one each test is asserting.
  */
 const ALL_LIMITS = {
+  "account-number": ACCT,
   "equity-order-size": 1_000_000,
   "equity-option-order-size": 1_000_000,
   "future-order-size": 1_000_000,
@@ -343,6 +344,7 @@ function component(legs: Leg[]): Record<string, unknown> {
  * shape and the one that made the missing field a fail-open.
  */
 const EQUITY_LIMITS = {
+  "account-number": ACCT,
   "equity-order-size": 100,
   "equity-option-order-size": 10,
   "future-order-size": 5,
@@ -816,7 +818,9 @@ describe("sanity checks: per-leg position limits", () => {
     // per-leg loop and return an empty warnings array, so a response that had
     // checked nothing was indistinguishable from one that had checked and
     // approved. "We could not look" is not "we looked and it was fine".
-    h = await harnessFor({ limits: { "future-order-size": 5 } });
+    h = await harnessFor({
+      limits: { "account-number": ACCT, "future-order-size": 5 },
+    });
     const warnings = await expectAllowed(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 9_999)]),
@@ -855,7 +859,9 @@ describe("sanity checks: per-leg position limits", () => {
     // usableLegQuantity accepts "1.5" because the API sends and accepts decimal
     // strings. The ceiling it is compared against would require a JSON
     // number, so a string-typed limit silently disabled the check for that leg.
-    h = await harnessFor({ limits: { "equity-order-size": "100" } });
+    h = await harnessFor({
+      limits: { "account-number": ACCT, "equity-order-size": "100" },
+    });
     const err = await expectBlocked(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 101)]),
@@ -1053,7 +1059,9 @@ describe("sanity checks: MAX_ORDER_NOTIONAL_USD", () => {
 
 describe("sanity checks: account state hard blocks", () => {
   it("blocks any order into a frozen account", async () => {
-    h = await harnessFor({ status: { "is-frozen": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-frozen": true },
+    });
     const err = await expectBlocked(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
@@ -1065,7 +1073,11 @@ describe("sanity checks: account state hard blocks", () => {
     // Frozen is checked before the closing-only branch, so "I'm only reducing
     // risk" is not an escape hatch.
     h = await harnessFor({
-      status: { "is-frozen": true, "is-closing-only": true },
+      status: {
+        "account-number": ACCT,
+        "is-frozen": true,
+        "is-closing-only": true,
+      },
     });
     const err = await expectBlocked(
       h,
@@ -1075,7 +1087,9 @@ describe("sanity checks: account state hard blocks", () => {
   });
 
   it("blocks an opening order into a closing-only account", async () => {
-    h = await harnessFor({ status: { "is-closing-only": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-closing-only": true },
+    });
     const err = await expectBlocked(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
@@ -1085,7 +1099,9 @@ describe("sanity checks: account state hard blocks", () => {
   });
 
   it("blocks a closing-only account when ANY leg opens", async () => {
-    h = await harnessFor({ status: { "is-closing-only": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-closing-only": true },
+    });
     const err = await expectBlocked(
       h,
       orderArgs([
@@ -1097,7 +1113,9 @@ describe("sanity checks: account state hard blocks", () => {
   });
 
   it("blocks an opening leg inside a complex order into a closing-only account", async () => {
-    h = await harnessFor({ status: { "is-closing-only": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-closing-only": true },
+    });
     const err = await expectBlocked(
       h,
       {
@@ -1120,7 +1138,9 @@ describe("sanity checks: soft conditions become warnings", () => {
   it("ALLOWS a closing order into a closing-only account, warning instead", async () => {
     // Refusing this would be a real defect: a closing-only account is exactly
     // the account that most needs to be able to close.
-    h = await harnessFor({ status: { "is-closing-only": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-closing-only": true },
+    });
     const warnings = await expectAllowed(
       h,
       orderArgs([leg("AAPL", "Equity", "Sell to Close", 1)]),
@@ -1129,7 +1149,9 @@ describe("sanity checks: soft conditions become warnings", () => {
   });
 
   it("warns, and submits, when the account is in a margin call", async () => {
-    h = await harnessFor({ status: { "is-in-margin-call": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-in-margin-call": true },
+    });
     const warnings = await expectAllowed(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),
@@ -1196,7 +1218,7 @@ describe("sanity checks: soft conditions become warnings", () => {
     // live order into a frozen account and reported `sanity_warnings: []`.
     [
       "an envelope skew nesting the status a level down",
-      { "trading-status": { "is-frozen": true } },
+      { "account-number": ACCT, "trading-status": { "is-frozen": true } },
     ],
   ])(
     "warns, and submits, when the trading-status payload is %s",
@@ -1289,7 +1311,11 @@ describe("sanity checks: soft conditions become warnings", () => {
   it("accumulates several warnings in one response", async () => {
     h = await harnessFor({
       limitsUnreachable: true,
-      status: { "is-closing-only": true, "is-in-margin-call": true },
+      status: {
+        "account-number": ACCT,
+        "is-closing-only": true,
+        "is-in-margin-call": true,
+      },
       dryRunExtra: {
         warnings: [
           {
@@ -1414,7 +1440,9 @@ describe("sanity checks: the checked body is the submitted body", () => {
   });
 
   it("checks the account state of the account the order names", async () => {
-    h = await harnessFor({ status: { "is-frozen": true } });
+    h = await harnessFor({
+      status: { "account-number": ACCT, "is-frozen": true },
+    });
     await expectBlocked(
       h,
       orderArgs([leg("AAPL", "Equity", "Buy to Open", 1)]),

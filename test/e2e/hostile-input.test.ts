@@ -20,7 +20,13 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
 import type { AxiosRequestConfig, AxiosResponse } from "axios";
-import { createHarness, callOk, callError, type Harness } from "./harness.js";
+import {
+  createHarness,
+  callOk,
+  callError,
+  type Harness,
+  type Route,
+} from "./harness.js";
 import { TastytradeClient } from "../../src/api-client.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import {
@@ -45,7 +51,7 @@ const ACCT = "5WX00001";
  * so a hostile-argument order can be driven all the way to a live POST when a
  * test needs to prove what would actually reach the broker.
  */
-const ORDER_ROUTES = [
+const ORDER_ROUTES: Route[] = [
   {
     matcher: /^\/accounts\/[^/]+\/orders\/dry-run$/,
     reply: {
@@ -73,13 +79,23 @@ const ORDER_ROUTES = [
   },
   {
     matcher: /^\/accounts\/[^/]+\/position-limit$/,
-    reply: {
-      data: { "equity-order-size": 100, "equity-option-order-size": 50 },
-    },
+    reply: (req) => ({
+      data: {
+        "account-number": req.url.split("/")[2],
+        "equity-order-size": 100,
+        "equity-option-order-size": 50,
+      },
+    }),
   },
   {
     matcher: /^\/accounts\/[^/]+\/trading-status$/,
-    reply: { data: { "is-frozen": false, "is-closing-only": false } },
+    reply: (req) => ({
+      data: {
+        "account-number": req.url.split("/")[2],
+        "is-frozen": false,
+        "is-closing-only": false,
+      },
+    }),
   },
   { matcher: "/watchlists", method: "POST", reply: { data: { name: "wl" } } },
 ];

@@ -198,6 +198,7 @@ function accountStateRoutes(): Route[] {
       method: "GET",
       reply: {
         data: {
+          "account-number": ACCT,
           "equity-order-size": 1000,
           "equity-option-order-size": 100,
           "future-order-size": 10,
@@ -209,6 +210,7 @@ function accountStateRoutes(): Route[] {
       method: "GET",
       reply: {
         data: {
+          "account-number": ACCT,
           "is-frozen": false,
           "is-closing-only": false,
           "is-in-margin-call": false,
@@ -757,9 +759,13 @@ describe("single use", () => {
       {
         matcher: POSITION_LIMIT_URL,
         method: "GET",
-        reply: { data: { "equity-order-size": 1 } },
+        reply: { data: { "account-number": ACCT, "equity-order-size": 1 } },
       },
-      { matcher: TRADING_STATUS_URL, method: "GET", reply: { data: {} } },
+      {
+        matcher: TRADING_STATUS_URL,
+        method: "GET",
+        reply: { data: { "account-number": ACCT } },
+      },
     ]);
 
     const args = orderArgs({ legs: [leg({ quantity: 5 })] });
@@ -1855,9 +1861,13 @@ describe("complex orders", () => {
       {
         matcher: POSITION_LIMIT_URL,
         method: "GET",
-        reply: { data: { "equity-order-size": 10 } },
+        reply: { data: { "account-number": ACCT, "equity-order-size": 10 } },
       },
-      { matcher: TRADING_STATUS_URL, method: "GET", reply: { data: {} } },
+      {
+        matcher: TRADING_STATUS_URL,
+        method: "GET",
+        reply: { data: { "account-number": ACCT } },
+      },
     ]);
 
     const args = complexArgs({
