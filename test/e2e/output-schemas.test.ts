@@ -211,17 +211,43 @@ describe("bounding a large payload cannot violate the advertised outputSchema", 
     }),
   };
 
-  it("delivers a truncated futures option chain instead of a -32602", async () => {
-    const harness = await armedClient(OVER_BUDGET);
-    const res = await harness.client.callTool({
-      name: "tastytrade_get_futures_option_chain_full",
-      arguments: { product_code: "ES" },
-    });
+  // The same over-budget array, under the one member of a WRITE tool's schema that
+  // is an array of entities. A write result is never size-capped (the change has
+  // happened), so the bounded value is still delivered and this still exercises the
+  // schema. The read tool that used to carry this case now refuses anything this
+  // large, which is asserted separately below: node-budget truncation leaves
+  // several MiB of indented JSON, far over the 1 MiB cap.
+  //
+  // Sized so the node budget runs out exactly between two entries, never inside
+  // one: the walk spends one node on the root, three on its scalar members and one
+  // on the array, then three on each entry (the object and its two values), so
+  // 199,995 nodes hold 66,665 whole entries. An entry cut off mid-object would
+  // lose a required key, which is a different question from the one asked here.
+  const OVER_BUDGET_WRITE = {
+    name: "big",
+    "group-name": "main",
+    "order-index": 0,
+    "watchlist-entries": Array.from({ length: 70_000 }, (_, i) => ({
+      symbol: `S${i}`,
+      "instrument-type": "Equity",
+    })),
+  };
+  const WRITE_CALL = {
+    name: "tastytrade_create_watchlist",
+    arguments: { name: "big", symbols: ["AAPL"] },
+  };
+
+  it("delivers a truncated array of entities instead of a -32602", async () => {
+    const harness = await armedClient(OVER_BUDGET_WRITE);
+    const res = await harness.client.callTool(WRITE_CALL);
 
     expect(res.isError).toBeFalsy();
-    const items = (res.structuredContent as { items?: unknown[] }).items ?? [];
+    const items =
+      (res.structuredContent as { "watchlist-entries"?: unknown[] })[
+        "watchlist-entries"
+      ] ?? [];
     // Truncated — otherwise the budget did not fire and this asserts nothing.
-    expect(items.length).toBeLessThan(12_000);
+    expect(items.length).toBeLessThan(70_000);
     expect(items.length).toBeGreaterThan(0);
     // ...and every surviving element is still an entity, not a marker.
     const offenders = items
@@ -234,11 +260,8 @@ describe("bounding a large payload cannot violate the advertised outputSchema", 
     // The tail is dropped rather than marked in band, so the out-of-band report
     // is now the ONLY channel. If it ever stops being emitted, truncation
     // becomes silent — which is worse than the bug this replaced.
-    const harness = await armedClient(OVER_BUDGET);
-    const res = await harness.client.callTool({
-      name: "tastytrade_get_futures_option_chain_full",
-      arguments: { product_code: "ES" },
-    });
+    const harness = await armedClient(OVER_BUDGET_WRITE);
+    const res = await harness.client.callTool(WRITE_CALL);
     const truncation = (
       res._meta as
         | { "tastytrade/provenance"?: { truncation?: Record<string, number> } }
@@ -248,6 +271,21 @@ describe("bounding a large payload cannot violate the advertised outputSchema", 
     expect(truncation).toBeDefined();
     expect(truncation!.nodesDroppedByBudget).toBeGreaterThan(0);
     expect(truncation!.arraysTruncated).toBeGreaterThan(0);
+  });
+
+  it("refuses the same over-budget futures chain as too large, naming the narrower call", async () => {
+    const harness = await armedClient(OVER_BUDGET);
+    const res = await harness.client.callTool({
+      name: "tastytrade_get_futures_option_chain_full",
+      arguments: { product_code: "ES" },
+    });
+
+    expect(res.isError).toBe(true);
+    const err = JSON.parse(
+      (res.content as Array<{ text: string }>)[0].text,
+    ) as { code: string; hint: string };
+    expect(err.code).toBe("result_too_large");
+    expect(err.hint).toContain("tastytrade_get_futures_option_chains");
   });
 });
 
