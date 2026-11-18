@@ -73,7 +73,9 @@ describe("the limit", () => {
     );
     expect(refusal?.code).toBe("result_too_large");
     expect(refusal?.retryable).toBe(false);
-    expect(refusal?.message).toContain("1.00 MiB");
+    expect(refusal?.message).toBe(
+      "The result is 1,048,577 bytes, over the 1,048,576-byte (1 MiB) limit for one tool result, so it was not returned.",
+    );
   });
 
   it("adds the structured mirror to the text before comparing", () => {
@@ -85,16 +87,16 @@ describe("the limit", () => {
       },
       "tastytrade_get_orders",
     );
-    expect(refusal?.message).toContain("1.14 MiB");
+    expect(refusal?.message).toContain("1,200,008 bytes");
   });
 
-  it("reports the size to two places", () => {
+  it("reports the size in bytes, with separators", () => {
     const refusal = resultCapRefusal(
       { content: [text(3 * 1_048_576)] },
       "tastytrade_get_orders",
     );
     expect(refusal?.message).toBe(
-      "The result is 3.00 MiB, over the 1.00 MiB limit for one tool result, so it was not returned.",
+      "The result is 3,145,728 bytes, over the 1,048,576-byte (1 MiB) limit for one tool result, so it was not returned.",
     );
   });
 
@@ -102,7 +104,7 @@ describe("the limit", () => {
     expect(resourceCapRefusal("a".repeat(1_048_576))).toBeUndefined();
     const refusal = resourceCapRefusal("é".repeat(524_289));
     expect(refusal?.code).toBe("result_too_large");
-    expect(refusal?.message).toContain("1.00 MiB");
+    expect(refusal?.message).toContain("1,048,578 bytes");
     expect(refusal?.message).toContain("resource read");
     expect(refusal?.hint).toContain(GENERIC_CAP_HINT);
   });

@@ -22,9 +22,10 @@ import type { ToolError } from "../safety/errors.js";
 export const RESULT_LIMIT_BYTES = 1_048_576;
 
 /**
- * The bytes a tool result puts on the wire: every text block, plus the
- * structured mirror of the same payload. Both are sent, so both count; measuring
- * the text alone would let a result of just under the limit double past it.
+ * The bytes a tool result puts on the wire: every text block (the provenance
+ * notice included, once it has been appended), plus the structured mirror of the
+ * same payload. All are sent, so all count; measuring the text alone would let a
+ * result of just under the limit double past it. `_meta` is not counted.
  */
 export function measureToolResult(result: {
   content?: unknown;
@@ -125,10 +126,12 @@ export function capHintFor(toolName: string | undefined): string {
   return row?.hint ?? GENERIC_CAP_HINT;
 }
 
-const mib = (bytes: number): string => (bytes / 1_048_576).toFixed(2);
+const withSeparators = (n: number): string => n.toLocaleString("en-US");
 
 /**
- * The refusal for a result of `bytes` bytes. Not retryable: the same call would
+ * The refusal for a result of `bytes` bytes. The size is given in bytes, not
+ * MiB, so a result one byte over the limit never reads "1.00 MiB, over the
+ * 1.00 MiB limit". Not retryable: the same call would
  * produce the same oversize answer. Pass the tool name to get its narrower-call
  * hint. Omit it for a resource read, which gets the generic hint and says
  * "resource read" instead of "tool result".
@@ -140,7 +143,7 @@ export function resultTooLargeError(
   const what = toolName === undefined ? "resource read" : "tool result";
   return {
     code: "result_too_large",
-    message: `The result is ${mib(bytes)} MiB, over the ${mib(RESULT_LIMIT_BYTES)} MiB limit for one ${what}, so it was not returned.`,
+    message: `The result is ${withSeparators(bytes)} bytes, over the ${withSeparators(RESULT_LIMIT_BYTES)}-byte (1 MiB) limit for one ${what}, so it was not returned.`,
     retryable: false,
     hint:
       `The read itself worked and changed nothing; repeating it unchanged will give the same answer. ` +

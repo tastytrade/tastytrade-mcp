@@ -8,6 +8,10 @@ import type { Harness } from "./harness.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { MCP_ERROR_INVALID_PARAMS } from "../../src/mcp-server/index.js";
 import type { ToolError } from "../../src/safety/errors.js";
+import {
+  RESULT_LIMIT_BYTES,
+  measureToolResult,
+} from "../../src/mcp-server/result-cap.js";
 
 const ACCT = "5WX00001";
 const MIB = 1_048_576;
@@ -69,7 +73,7 @@ describe("a read tool result over 1 MiB", () => {
     expect(err.code).toBe("result_too_large");
     expect(err.retryable).toBe(false);
     expect(err.message).toMatch(
-      /^The result is 1\.\d\d MiB, over the 1\.00 MiB/,
+      /^The result is 1,\d{3},\d{3} bytes, over the 1,048,576-byte \(1 MiB\) limit/,
     );
     expect(err.hint).toContain("per_page");
     expect(err.hint).toContain("start_date");
@@ -105,6 +109,99 @@ describe("a read tool result over 1 MiB", () => {
     );
     expect(text).toBeLessThan(MIB);
     expect(text + structured).toBeGreaterThan(MIB);
+  });
+});
+
+describe("the limit counts the provenance notice", () => {
+  const TRANSACTIONS = `/accounts/${ACCT}/transactions`;
+
+  /**
+   * 400 full records, `chunks` records of 1,500 characters, and a last record
+   * of `padChars` characters. Every string stays under the 2,048-character
+   * per-leaf bound, so only the size cap can refuse it.
+   */
+  const build = (chunks: number, padChars: number) => [
+    ...records(300, 1270),
+    ...Array.from({ length: chunks }, (_, i) => ({
+      id: 900000 + i,
+      d: "y".repeat(1500),
+    })),
+    { id: 999999, d: "y".repeat(padChars) },
+  ];
+
+  /** Text plus structured mirror, before the provenance block is appended. */
+  const preProvenanceBytes = (payload: unknown[]): number =>
+    Buffer.byteLength(JSON.stringify(payload, null, 2), "utf8") +
+    Buffer.byteLength(JSON.stringify({ items: payload }), "utf8");
+
+  /**
+   * A payload whose pre-provenance size is `target` or one byte under it (each
+   * padding character counts twice, once in the text and once in the mirror).
+   */
+  const payloadFor = (target: number): unknown[] => {
+    for (let chunks = 0; chunks < 1000; chunks++) {
+      const pad = Math.floor(
+        (target - preProvenanceBytes(build(chunks, 0))) / 2,
+      );
+      if (pad >= 0 && pad <= 2000) return build(chunks, pad);
+    }
+    throw new Error("no payload fits the target");
+  };
+
+  const call = async (payload: unknown[]): Promise<Result> => {
+    h = await createHarness({
+      routes: [
+        {
+          matcher: TRANSACTIONS,
+          method: "GET",
+          reply: { data: { items: payload } },
+        },
+      ],
+    });
+    return (await h.client.callTool({
+      name: "tastytrade_get_transactions",
+      arguments: { account_number: ACCT },
+    })) as Result;
+  };
+
+  const lastBlockBytes = (res: Result): number =>
+    Buffer.byteLength(
+      res.content?.[res.content.length - 1]?.text ?? "",
+      "utf8",
+    );
+
+  it("delivers a result that fits only once the notice is counted, and never one over the limit", async () => {
+    const payload = payloadFor(RESULT_LIMIT_BYTES - 5_000);
+    const res = await call(payload);
+    expect(res.isError).toBeFalsy();
+    // What was delivered, notice included, is what was measured, and is under.
+    const delivered = measureToolResult(res);
+    expect(delivered).toBeLessThanOrEqual(RESULT_LIMIT_BYTES);
+    expect(delivered).toBe(preProvenanceBytes(payload) + lastBlockBytes(res));
+  });
+
+  it("refuses a result that is at or under the limit until the notice is added, then over it", async () => {
+    // Learn the notice's size from a delivered call, then aim 10 bytes under the limit.
+    const first = await call(payloadFor(RESULT_LIMIT_BYTES - 5_000));
+    const notice = lastBlockBytes(first);
+    expect(notice).toBeGreaterThan(100);
+    await h?.close();
+
+    const payload = payloadFor(RESULT_LIMIT_BYTES - 10);
+    // Fixture guard: the payload passes without the notice and fails with it, so only
+    // the order of measuring and appending tells the two apart.
+    expect(preProvenanceBytes(payload)).toBeLessThanOrEqual(RESULT_LIMIT_BYTES);
+    expect(preProvenanceBytes(payload) + notice).toBeGreaterThan(
+      RESULT_LIMIT_BYTES,
+    );
+
+    const res = await call(payload);
+    expect(res.isError).toBe(true);
+    const err = JSON.parse(res.content?.[0]?.text ?? "{}") as ToolError;
+    expect(err.code).toBe("result_too_large");
+    expect(err.message).toContain(
+      `${(preProvenanceBytes(payload) + notice).toLocaleString("en-US")} bytes`,
+    );
   });
 });
 
@@ -146,7 +243,7 @@ describe("resources/read over 1 MiB", () => {
     expect(failure?.code).toBe(MCP_ERROR_INVALID_PARAMS);
     expect(failure?.data?.code).toBe("result_too_large");
     expect(failure?.data?.retryable).toBe(false);
-    expect(failure?.data?.message).toContain("1.00 MiB");
+    expect(failure?.data?.message).toContain("1,048,576-byte (1 MiB) limit");
   });
 
   it("reads a small one", async () => {

@@ -3146,14 +3146,12 @@ export const MCP_ERROR_INTERNAL = -32603;
 
 /**
  * The JSON-RPC code a `resources/read` failure reports, given the taxonomy code
- * the failure classified as. Only three of the codes map onto a JSON-RPC code with
+ * the failure classified as. Only two of the codes map onto a JSON-RPC code with
  * a defined meaning; the rest stay InternalError and rely on `data.code`.
  */
 function rpcCodeForResourceError(code: ToolError["code"]): number {
   if (code === "not_found") return MCP_ERROR_RESOURCE_NOT_FOUND;
-  if (code === "validation" || code === "result_too_large") {
-    return MCP_ERROR_INVALID_PARAMS;
-  }
+  if (code === "validation") return MCP_ERROR_INVALID_PARAMS;
   return MCP_ERROR_INTERNAL;
 }
 
@@ -3836,17 +3834,19 @@ export class TastytradeMCPServer {
           // `firstIsJson`.
         }
       }
-      // The size cap, on READ tools only, measured after the structured mirror is
-      // in place because both go on the wire. A write or destructive result is
-      // never refused here: the change has already happened, and an agent told
-      // that a call failed may repeat it.
+      // The provenance marker goes on before the size cap is measured, so the
+      // block it appends counts toward the limit: nothing is delivered over 1 MiB.
+      // It is still the last thing added to the content, so the block is not
+      // itself parsed, bounded, or mirrored.
+      attachProvenance(result, boundedContent.tally);
+      // The size cap, on READ tools only, measured after the structured mirror
+      // and the provenance block are in place because all of them go on the wire.
+      // A write or destructive result is never refused here: the change has
+      // already happened, and an agent told that a call failed may repeat it.
       if (result && !result.isError && accessClassFor(annotations) === "read") {
         const refusal = resultCapRefusal(result, name);
         if (refusal) throw toolError(refusal);
       }
-      // The provenance marker goes on last, so the block it appends is not
-      // itself parsed, bounded, or mirrored.
-      attachProvenance(result, boundedContent.tally);
       return result;
     } catch (e) {
       // adaptError already ran the value through sanitizeToolError, so this
