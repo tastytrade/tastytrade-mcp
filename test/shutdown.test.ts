@@ -8,6 +8,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import {
   InFlight,
+  OwedResponses,
   SHUTDOWN_DRAIN_MS,
   installShutdownHandlers,
   shuttingDownRefusal,
@@ -83,6 +84,72 @@ describe("InFlight", () => {
     expect(settled).toBe(false);
     jest.advanceTimersByTime(1);
     await expect(done).resolves.toEqual({ drained: false, stillRunning: 1 });
+  });
+});
+
+describe("OwedResponses", () => {
+  const response = (id: number | string): object => ({
+    jsonrpc: "2.0",
+    id,
+    result: {},
+  });
+
+  it("keeps a call counted until its own response has been sent", async () => {
+    const flight = new InFlight();
+    const owed = new OwedResponses();
+    const release = flight.admit() as () => void;
+    owed.hold(7, release, new AbortController().signal);
+
+    const drain = flight.drain(60_000);
+    let settled = false;
+    void drain.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(owed.pending).toBe(1);
+
+    owed.sent(response(8)); // someone else's answer
+    owed.sent({ jsonrpc: "2.0", id: 7, method: "ping" }); // a request, not an answer
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    owed.sent(response(7));
+    await expect(drain).resolves.toEqual({ drained: true });
+    expect(owed.pending).toBe(0);
+  });
+
+  it("releases an error response too, and string ids stay distinct from numbers", () => {
+    const owed = new OwedResponses();
+    const released: string[] = [];
+    owed.hold("1", () => released.push("string"), new AbortController().signal);
+    owed.hold(1, () => released.push("number"), new AbortController().signal);
+    owed.sent({ jsonrpc: "2.0", id: 1, error: { code: -32603, message: "x" } });
+    expect(released).toEqual(["number"]);
+    owed.sent(response("1"));
+    expect(released).toEqual(["number", "string"]);
+  });
+
+  it("releases at once with no request id or an aborted signal", () => {
+    const owed = new OwedResponses();
+    const release = jest.fn();
+    owed.hold(undefined, release);
+    const aborted = new AbortController();
+    aborted.abort();
+    owed.hold(3, release, aborted.signal);
+    expect(release).toHaveBeenCalledTimes(2);
+    expect(owed.pending).toBe(0);
+  });
+
+  it("releases when the request is aborted, since no response will follow", () => {
+    const owed = new OwedResponses();
+    const release = jest.fn();
+    const controller = new AbortController();
+    owed.hold(4, release, controller.signal);
+    expect(release).not.toHaveBeenCalled();
+    controller.abort();
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(owed.pending).toBe(0);
+    owed.sent(response(4));
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });
 

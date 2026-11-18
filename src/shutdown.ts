@@ -97,6 +97,65 @@ export class InFlight {
 }
 
 /**
+ * The responses a server owes its client, so a call is not counted as finished
+ * until its answer has been handed to the transport.
+ *
+ * Releasing an {@link InFlight} slot when the handler returns is too early: the
+ * SDK sends the result in a later step, and a drain that wakes in between closes
+ * the connection, which makes the SDK drop every response it has not yet sent. The
+ * call has then reached the broker and its answer is lost. So the handler hands
+ * its release to {@link hold}, and the transport's `send` calls {@link sent} once
+ * the write has settled.
+ *
+ * A response that will never be sent (the caller cancelled, or the connection
+ * closed) is signalled by the request's abort signal, which releases at once.
+ */
+export class OwedResponses {
+  private readonly owed = new Map<string | number, () => void>();
+
+  /**
+   * Keep `release` until the response to request `id` has been sent. With no id,
+   * or when `signal` has already aborted, there is nothing to wait for and it is
+   * released now.
+   */
+  hold(
+    id: string | number | undefined,
+    release: () => void,
+    signal?: AbortSignal,
+  ): void {
+    if (id === undefined || signal?.aborted) {
+      release();
+      return;
+    }
+    this.owed.set(id, release);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        if (this.owed.get(id) === release) this.owed.delete(id);
+        release();
+      },
+      { once: true },
+    );
+  }
+
+  /** A message has been written. If it answers a held request, release that one. */
+  sent(message: object): void {
+    if (!("id" in message) || "method" in message) return;
+    const id = (message as { id: unknown }).id;
+    if (typeof id !== "string" && typeof id !== "number") return;
+    const release = this.owed.get(id);
+    if (release === undefined) return;
+    this.owed.delete(id);
+    release();
+  }
+
+  /** Responses still owed. */
+  get pending(): number {
+    return this.owed.size;
+  }
+}
+
+/**
  * What a tool call that arrives during shutdown is told.
  *
  * `retryable: false`, because the same call to this same process will keep being
@@ -124,7 +183,10 @@ export interface ShutdownTarget {
   readonly running: number;
   /** Stop starting calls, and wait up to `ms` for the running ones. */
   beginShutdown(ms: number): Promise<DrainOutcome>;
-  /** Close the transport. */
+  /**
+   * Close the transport. Everything already written must have reached the client's
+   * end first: the process exits as soon as this resolves.
+   */
   close(): Promise<void>;
 }
 
@@ -139,7 +201,8 @@ export interface ShutdownDeps {
 /**
  * Install SIGTERM and SIGINT handlers that drain and exit.
  *
- * First signal: log one line, `beginShutdown`, `close` (a failure there is
+ * First signal: log one line, `beginShutdown` (which resolves only once each
+ * running call's response has been written), `close` (a failure there is
  * swallowed: the process is leaving either way), log the outcome, then exit 0 if
  * every call finished and 1 if any was still running at the bound. A second signal
  * while that is under way exits 1 at once: whoever sent it is out of patience.

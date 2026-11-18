@@ -83,6 +83,7 @@ import { consumeToken, issueToken } from "../safety/confirmation.js";
 import { PACKAGE_VERSION } from "../version.js";
 import {
   InFlight,
+  OwedResponses,
   SHUTDOWN_ABORT_REASON,
   installShutdownHandlers,
   shuttingDownRefusal,
@@ -3216,6 +3217,29 @@ export interface RunIo {
   };
 }
 
+/**
+ * Resolve once everything written to `output` so far has been processed, or after
+ * two seconds if it has not (a client that has stopped reading must not hold the
+ * exit). An empty write is queued behind the earlier ones, so its callback is the
+ * signal. Never rejects.
+ */
+async function flushWrites(output: Writable): Promise<void> {
+  if (output.destroyed || output.writableEnded) return;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 2000);
+    timer.unref();
+    const done = (): void => {
+      clearTimeout(timer);
+      resolve();
+    };
+    try {
+      output.write("", done);
+    } catch {
+      done();
+    }
+  });
+}
+
 export class TastytradeMCPServer {
   private server: Server;
   private client: TastytradeClient;
@@ -3245,6 +3269,14 @@ export class TastytradeMCPServer {
    * {@link beginShutdown}, after which `dispatchToolCall` refuses every new call.
    */
   private readonly inFlight = new InFlight();
+  /**
+   * The answers owed for admitted calls. A call stays counted in `inFlight` until
+   * its response has been written, not merely until its handler returned, so a
+   * drain that finishes cannot close the connection under an unsent result.
+   */
+  private readonly owedResponses = new OwedResponses();
+  /** Waits for what `run()` has written to its output to be accepted. Set by `run()`. */
+  private flushOutput: (() => Promise<void>) | undefined;
   /**
    * Aborted, with {@link SHUTDOWN_ABORT_REASON}, when shutdown begins. Handed to
    * every call alongside the caller's own signal, so a submit that has not yet
@@ -3668,7 +3700,12 @@ export class TastytradeMCPServer {
           "Top-level constructor argument is forbidden.",
         );
       }
-      return this.dispatchToolCall(request.params.name, args, extra?.signal);
+      return this.dispatchToolCall(
+        request.params.name,
+        args,
+        extra?.signal,
+        extra?.requestId,
+      );
     });
   }
 
@@ -3734,11 +3771,15 @@ export class TastytradeMCPServer {
     name: string,
     args: any,
     signal?: AbortSignal,
+    requestId?: string | number,
   ): Promise<any> {
     const release = this.inFlight.admit();
     if (release === null) {
       return sanitizedErrorResult(adaptError(toolError(shuttingDownRefusal())));
     }
+    // The slot is handed to `owedResponses` when the call ends and released when the
+    // response has been written (see OwedResponses), unless the call throws before
+    // returning, in which case the SDK answers with an error and `sent` releases it.
     try {
       return await this.runToolCall(
         name,
@@ -3750,7 +3791,7 @@ export class TastytradeMCPServer {
         ),
       );
     } finally {
-      release();
+      this.owedResponses.hold(requestId, release, signal);
     }
   }
 
@@ -6392,7 +6433,9 @@ export class TastytradeMCPServer {
    */
   async run(io: RunIo = {}) {
     const transport = new StdioServerTransport(io.stdin, io.stdout);
-    await this.server.connect(transport);
+    const output = io.stdout ?? process.stdout;
+    this.flushOutput = () => flushWrites(output);
+    await this.connect(transport);
     console.error(startupBanner(this.apiEndpointLabel, this.readOnlyMode));
     const proc = io.process ?? {
       on: (signal: ShutdownSignal, listener: () => void) =>
@@ -6421,9 +6464,17 @@ export class TastytradeMCPServer {
     return this.inFlight.drain(ms);
   }
 
-  /** Close the protocol connection. */
+  /**
+   * Close the protocol connection, after what has been written has been accepted by
+   * the output. By now every drained call's response has been passed to the
+   * transport (see {@link OwedResponses}); this covers the output still holding it.
+   */
   async close(): Promise<void> {
-    await this.server.close();
+    try {
+      await this.flushOutput?.();
+    } finally {
+      await this.server.close();
+    }
   }
 
   /**
@@ -6436,6 +6487,17 @@ export class TastytradeMCPServer {
    * handlers rather than by reaching past them.
    */
   async connect(transport: Transport): Promise<void> {
+    // Tell `owedResponses` when each message has been written. The SDK gives a
+    // handler no hook for "my result has been sent", and a drain must not close
+    // the connection before it has.
+    const send = transport.send.bind(transport);
+    transport.send = async (message, options) => {
+      try {
+        await send(message, options);
+      } finally {
+        this.owedResponses.sent(message);
+      }
+    };
     await this.server.connect(transport);
   }
 }

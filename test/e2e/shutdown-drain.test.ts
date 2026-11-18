@@ -10,6 +10,8 @@ import type { Harness, Route } from "./harness.js";
 import { _resetRateLimitsForTest } from "../../src/safety/rate-limit.js";
 import { _resetTokensForTest } from "../../src/safety/confirmation.js";
 import type { ToolError } from "../../src/safety/errors.js";
+import { installShutdownHandlers } from "../../src/shutdown.js";
+import type { ShutdownSignal } from "../../src/shutdown.js";
 
 const ACCT = "5WX00001";
 const BALANCES = `/accounts/${ACCT}/balances`;
@@ -194,5 +196,154 @@ describe("a submit that has not yet been sent when shutdown begins", () => {
     })) as Result;
     expect(res.isError).toBeFalsy();
     expect(posts(h)).toEqual([`/accounts/${ACCT}/orders`]);
+  });
+});
+
+/**
+ * The production shutdown sequence (signal, drain, close, exit) against a real
+ * server, with only the process faked. `exited` resolves with the exit code, and
+ * `signal` delivers a signal as the process would.
+ */
+function realShutdown(target: Harness["server"]): {
+  signal(name: ShutdownSignal): void;
+  exited: Promise<number>;
+  log: string[];
+} {
+  const listeners = new Map<ShutdownSignal, () => void>();
+  const log: string[] = [];
+  let exit!: (code: number) => void;
+  const exited = new Promise<number>((resolve) => (exit = resolve));
+  installShutdownHandlers(target, {
+    on: (name, listener) => listeners.set(name, listener),
+    exit: (code) => exit(code),
+    log: (line) => log.push(line),
+  });
+  return { signal: (name) => listeners.get(name)?.(), exited, log };
+}
+
+describe("a call that is running when the signal arrives, through close()", () => {
+  it("is answered with its result, not a closed connection", async () => {
+    h = await createHarness({
+      routes: [
+        {
+          matcher: BALANCES,
+          method: "GET",
+          reply: { data: { "net-liquidating-value": "1.00" }, delayMs: 300 },
+        },
+      ],
+    });
+    const shutdown = realShutdown(h.server);
+
+    const running = h.client.callTool({
+      name: "tastytrade_get_balances",
+      arguments: { account_number: ACCT },
+    });
+    await untilRunning(h, 1);
+    shutdown.signal("SIGTERM");
+
+    // Rejects with "MCP error -32000: Connection closed" if close() ran first.
+    const res = (await running) as Result;
+    expect(res.isError).toBeFalsy();
+    expect(res.content?.[0]?.text).toContain("net-liquidating-value");
+    await expect(shutdown.exited).resolves.toBe(0);
+    expect(h.server.running).toBe(0);
+  });
+
+  it("answers a placed order that was already sent to the broker", async () => {
+    const args = {
+      account_number: ACCT,
+      order_type: "Limit",
+      time_in_force: "Day",
+      price: "10.00",
+      price_effect: "Debit",
+      legs: [
+        {
+          symbol: "AAPL",
+          instrument_type: "Equity",
+          action: "Buy to Open",
+          quantity: 1,
+        },
+      ],
+    };
+    h = await createHarness({
+      routes: [
+        { matcher: POSITION_LIMIT, method: "GET", reply: { data: {} } },
+        {
+          matcher: `/accounts/${ACCT}/trading-status`,
+          method: "GET",
+          reply: { data: {} },
+        },
+        {
+          matcher: `/accounts/${ACCT}/orders/dry-run`,
+          method: "POST",
+          reply: {
+            data: {
+              order: { id: 1, status: "Received" },
+              warnings: [],
+              "buying-power-effect": {
+                "change-in-buying-power": "100.00",
+                "change-in-buying-power-effect": "Debit",
+              },
+            },
+          },
+        },
+        {
+          matcher: `/accounts/${ACCT}/orders`,
+          method: "POST",
+          reply: {
+            data: { order: { id: 9001, status: "Received" } },
+            delayMs: 300,
+          },
+        },
+      ],
+    });
+    const dry = (await callOk(h, "tastytrade_dry_run_order", args)) as {
+      confirmation_token: string;
+    };
+    const shutdown = realShutdown(h.server);
+
+    const placing = h.client.callTool({
+      name: "tastytrade_place_order",
+      arguments: { ...args, confirmation_token: dry.confirmation_token },
+    });
+    // The order is on the wire: it will reach the broker whatever happens next.
+    await untilRequested(h, `/accounts/${ACCT}/orders`);
+    shutdown.signal("SIGTERM");
+
+    const res = (await placing) as Result;
+    expect(res.isError).toBeFalsy();
+    expect(res.content?.[0]?.text).toContain("9001");
+    await expect(shutdown.exited).resolves.toBe(0);
+  });
+
+  it("still exits 1 on a second signal, and refuses new calls while draining", async () => {
+    h = await createHarness({
+      routes: [
+        {
+          matcher: BALANCES,
+          method: "GET",
+          reply: { data: {}, delayMs: 600 },
+        },
+      ],
+    });
+    const shutdown = realShutdown(h.server);
+    const running = h.client
+      .callTool({
+        name: "tastytrade_get_balances",
+        arguments: { account_number: ACCT },
+      })
+      .catch(() => undefined);
+    await untilRunning(h, 1);
+    shutdown.signal("SIGTERM");
+    const late = (await h.client.callTool({
+      name: "tastytrade_get_positions",
+      arguments: { account_number: ACCT },
+    })) as Result;
+    expect(errorOf(late).code).toBe("request_cancelled");
+    shutdown.signal("SIGINT");
+    await expect(shutdown.exited).resolves.toBe(1);
+    await h.close();
+    h = undefined;
+    await running;
   });
 });
