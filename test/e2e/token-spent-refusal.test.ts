@@ -74,6 +74,7 @@ function routes(liveStatus: number): Route[] {
       matcher: `/accounts/${ACCT}/position-limit`,
       reply: {
         data: {
+          "account-number": ACCT,
           "equity-order-size": 100_000,
           "equity-option-order-size": 100_000,
           "future-order-size": 100_000,
@@ -85,6 +86,7 @@ function routes(liveStatus: number): Route[] {
       matcher: `/accounts/${ACCT}/trading-status`,
       reply: {
         data: {
+          "account-number": ACCT,
           "is-frozen": false,
           "is-closing-only": false,
           "is-in-margin-call": false,

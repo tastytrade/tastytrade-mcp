@@ -669,19 +669,27 @@ describe("the order path pays for the requests it actually makes", () => {
     {
       matcher: /\/accounts\/[^/]+\/position-limit$/,
       method: "GET",
-      reply: {
+      reply: (req) => ({
         data: {
+          "account-number": req.url.split("/")[2],
           "equity-order-size": 1_000,
           "equity-option-order-size": 1_000,
           "future-order-size": 1_000,
           "future-option-order-size": 1_000,
         },
-      },
+      }),
     },
     {
       matcher: /\/accounts\/[^/]+\/trading-status$/,
       method: "GET",
-      reply: { data: {} },
+      reply: (req) => ({
+        data: {
+          "account-number": req.url.split("/")[2],
+          "is-frozen": false,
+          "is-closing-only": false,
+          "is-in-margin-call": false,
+        },
+      }),
     },
   ];
 

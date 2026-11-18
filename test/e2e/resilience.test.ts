@@ -243,6 +243,7 @@ function sanityRoutes(): Route[] {
       method: "GET",
       reply: {
         data: {
+          "account-number": ACCT,
           "equity-order-size": 100,
           "equity-option-order-size": 100,
           "future-order-size": 100,
@@ -253,7 +254,12 @@ function sanityRoutes(): Route[] {
       matcher: `/accounts/${ACCT}/trading-status`,
       method: "GET",
       reply: {
-        data: { "is-frozen": false, "is-closing-only": false },
+        data: {
+          "account-number": ACCT,
+          "is-frozen": false,
+          "is-closing-only": false,
+          "is-in-margin-call": false,
+        },
       },
     },
   ];
@@ -827,6 +833,7 @@ describe("a timeout on a write", () => {
   it("applies to a PUT (replace)", async () => {
     h = await createHarness({
       routes: [
+        ...sanityRoutes(),
         {
           matcher: ORDER_DRY_RUN_BY_ID,
           method: "POST",
@@ -857,6 +864,7 @@ describe("a timeout on a write", () => {
   it("applies to a PATCH (edit)", async () => {
     h = await createHarness({
       routes: [
+        ...sanityRoutes(),
         {
           matcher: ORDER_DRY_RUN_BY_ID,
           method: "POST",
@@ -2130,12 +2138,27 @@ describe("a submit whose 2xx carries no order", () => {
       {
         matcher: /\/accounts\/[^/]+\/position-limit$/,
         method: "GET",
-        reply: { data: {} },
+        reply: (req) => ({
+          data: {
+            "account-number": req.url.split("/")[2],
+            "equity-order-size": 1_000_000,
+            "equity-option-order-size": 1_000_000,
+            "future-order-size": 1_000_000,
+            "future-option-order-size": 1_000_000,
+          },
+        }),
       },
       {
         matcher: /\/accounts\/[^/]+\/trading-status$/,
         method: "GET",
-        reply: { data: {} },
+        reply: (req) => ({
+          data: {
+            "account-number": req.url.split("/")[2],
+            "is-frozen": false,
+            "is-closing-only": false,
+            "is-in-margin-call": false,
+          },
+        }),
       },
       {
         matcher: `/accounts/${ACCT}/orders/dry-run`,

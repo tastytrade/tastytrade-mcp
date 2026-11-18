@@ -19,20 +19,35 @@
  * unreadable dry-run payload is a hard block — "we could not look" is not the
  * same claim as "we looked and it was fine".
  *
- * Where a check is genuinely soft — the account lookups, which the API enforces
- * server-side anyway — the caller is ALWAYS told which checks did not run. A
- * position-limit payload that is unreadable, that carries no usable ceiling for a
- * leg's instrument class, or a leg whose class has no published ceiling produces
- * a warning rather than something that reads like a clean pass. There is
- * deliberately no fallthrough onto another class's ceiling: comparing a quantity
- * against a limit that does not govern it is not a check, and it hides that none
- * ran. A partial payload is normal per the vendored spec
- * (open-api-spec/account-status.md), so a body carrying none of the flags is a
- * shape to expect.
+ * The two account reads, GET /position-limit and GET /trading-status, fail
+ * closed for an order that might open a position. When one cannot be read (it
+ * threw, timed out, or answered with something that is not an object), or the
+ * answer does not name the account being traded, that order is refused with
+ * `sanity_check_failed` and the hint says what failed. An order whose every leg
+ * is "Buy to Close" or "Sell to Close", and nothing else, still goes ahead with a
+ * warning and the check listed as not run: closing a position must stay possible
+ * while these reads are down, and the broker still enforces frozen accounts and
+ * its own limits. The three routes whose body carries no legs (replace_order,
+ * edit_order, edit_complex_order) have nothing to show that they only close, so
+ * they are treated as opening.
  *
- * Account state is the one place a hard block degrades to a warning: if
- * GET /trading-status cannot be read, the API is the backstop. That is
- * acceptable only because the degradation is always stated.
+ * The same refusal applies to an answer that does name the account but cannot
+ * be used: a limits record with no usable ceiling for the instrument class of a
+ * leg that might open, and a trading status in which `is-frozen`,
+ * `is-closing-only` or `is-in-margin-call` is absent or not a JSON boolean (a
+ * restriction that cannot be read is not one that is absent). An order that only
+ * closes is warned about instead. In both cases a check is recorded as run, and
+ * so left out of `checks_not_run`, only when the data it needs was read: each
+ * account-state check is keyed to its own flag being a boolean.
+ *
+ * What stays a warning on every route, whatever the legs: a leg whose class has
+ * no published ceiling at all (crypto and the rest), and an absent
+ * `is-risk-reducing-only`, which is advisory and is named in `checks_not_run`.
+ * There is deliberately no fallthrough onto another class's ceiling: comparing a
+ * quantity against a limit that does not govern it is not a check, and it hides
+ * that none ran. The spec says a partial payload is normal
+ * (open-api-spec/account-status.md), and that is why the order that only closes
+ * still goes ahead on one, with the caller told which checks did not run.
  *
  * Anything this module says to the caller — warning as much as refusal — is an
  * egress path. BROKER-supplied text is scrubbed and bounded where it is rendered
@@ -48,7 +63,14 @@
 
 import { TastytradeClient } from "../api-client.js";
 import { boundedText } from "./bounded-text.js";
-import { redactDeep, redactSecrets, toolError } from "./errors.js";
+import {
+  adaptError,
+  isToolErrorException,
+  redactDeep,
+  redactSecrets,
+  toolError,
+} from "./errors.js";
+import type { ToolErrorException } from "./errors.js";
 import { chargeUpstreamCallDebt } from "./rate-limit.js";
 
 interface OrderLeg {
@@ -143,26 +165,30 @@ const ACCOUNT_STATE_FLAGS = [
 ] as const;
 
 /**
- * Did this trading-status payload carry a readable value for ANY account-state
- * flag?
+ * The flags an order that might open a position cannot be sent without.
  *
- * `null` counts as absent, not `false`. A JSON null in a boolean field is not a
- * broker saying "no"; reading it as "not frozen" is the same fail-open as never
- * looking.
+ * `is-frozen`, `is-closing-only` and `is-in-margin-call`: the three the hosted
+ * server reads with `status_flag`, which refuses an order when one is absent or
+ * is anything but a JSON boolean. A restriction that cannot be read is not a
+ * restriction that is absent, and `null`, `0`, `""` and `"false"` are not the
+ * broker saying "no". `is-risk-reducing-only` stays advisory: it is only ever a
+ * warning here, so there is nothing for its absence to disarm.
  *
- * ANY rather than ALL, and deliberately not mirroring the position-limit half's
- * per-ceiling warning: the vendored spec says only fields relevant to the
- * account's current configuration are returned, so a healthy account legitimately
- * omits individual flags and a warning per absent flag would fire on nearly every
- * order — noise that stops carrying information. What ANY catches is the case
- * where there is no evidence the payload is a trading status at all: `{}`, a body
- * of nulls, or an envelope skew nesting the real status one level down.
+ * The spec says only fields relevant to the account's current configuration are
+ * returned (open-api-spec/account-status.md). That makes a partial record
+ * possible for a healthy account, and for an order that might open it is still
+ * refused, because this module cannot tell a healthy omission from a proxy that
+ * dropped a restriction.
  */
-function readsAnyAccountStateFlag(status: Record<string, unknown>): boolean {
-  return ACCOUNT_STATE_FLAGS.some((flag) => {
-    const v = status[flag];
-    return v !== undefined && v !== null;
-  });
+const REQUIRED_STATUS_FLAGS = [
+  "is-frozen",
+  "is-closing-only",
+  "is-in-margin-call",
+] as const;
+
+/** Is this flag, on this payload, a JSON boolean? `null` and absent are not. */
+function isBooleanFlag(status: Record<string, unknown>, flag: string): boolean {
+  return typeof status[flag] === "boolean";
 }
 
 interface DryRunLike {
@@ -618,6 +644,20 @@ function mayOpenPosition(leg: OrderLeg): boolean {
 }
 
 /**
+ * Might this order OPEN a position? True when the route carries no legs to look
+ * at (replace_order, edit_order, edit_complex_order), when the leg list is empty,
+ * and when any leg might open. False only when every leg is exactly "Buy to
+ * Close" or "Sell to Close".
+ *
+ * What a failed account read does depends on this answer: an order that cannot
+ * open anything is still submitted with a warning, so closing a position stays
+ * possible while the account reads are down, and one that might open is refused.
+ */
+function mayOpenAny(legs?: readonly OrderLeg[]): boolean {
+  return legs === undefined || legs.length === 0 || legs.some(mayOpenPosition);
+}
+
+/**
  * A leg's quantity as a number the position-limit check can compare, or `null`
  * when the leg legitimately carries none.
  *
@@ -918,16 +958,17 @@ export function dryRunRouteChecksNotRun(): SanityCheckId[] {
  * about to go live, having burnt its token — and the natural recovery of
  * re-dry-running places a SECOND order.
  *
- * The reads that stall are the SOFT ones: a failure of either only pushes a
- * warning and the submit proceeds, so spending tens of seconds on them buys
- * nothing. Five seconds is far above what either endpoint takes when healthy and
- * far below any plausible client timeout. It does not close the window — see the
- * abort check in the dispatcher for the irreducible remainder, the POST itself.
+ * Neither read is worth tens of seconds: when one fails, an order that might
+ * open a position is refused and one that only closes proceeds with a warning,
+ * so waiting longer buys nothing either way. Five seconds is far above what
+ * either endpoint takes when healthy and far below any plausible client timeout.
+ * It does not close the window — see the abort check in the dispatcher for the
+ * irreducible remainder, the POST itself.
  *
  * Reordering is the wrong answer, worth naming so it is not proposed again:
  * putting the POST first would stop the reads spending the caller's budget and
- * would also stop them being checks. Both can HARD-BLOCK, and a check that runs
- * after the order is at the exchange has refused nothing.
+ * would also stop them being checks. Both can refuse an order, and a check that
+ * runs after the order is at the exchange has refused nothing.
  *
  * Enforced here rather than by lowering the transport timeout: these two GETs are
  * the only requests that want a short deadline, and a race in this module is
@@ -950,9 +991,10 @@ class AdvisoryReadTimeout extends Error {
  *
  * Giving up abandons the request rather than cancelling it — the socket is left
  * to settle on its own and its answer is discarded. That is acceptable only
- * because these two reads are advisory: nothing downstream is waiting on the
- * value, and `Promise.race` has already subscribed to `work`, so a late
- * rejection is handled and cannot surface as an unhandled rejection.
+ * because nothing downstream is waiting on a late answer: a read that outran its
+ * budget counts as a failed read, and `Promise.race` has already subscribed to
+ * `work`, so a late rejection is handled and cannot surface as an unhandled
+ * rejection.
  */
 function withAdvisoryBudget<T>(work: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
@@ -1132,6 +1174,212 @@ function collectDryRunWarnings(
   }
 }
 
+// ---------------------------------------------------------------------------
+// A failed account read
+//
+// The position-limit and trading-status reads are the only evidence this module
+// has about the account an order is going to. When one cannot be read, or what
+// came back is not demonstrably this account's record, there is nothing to
+// check the order against. An order that might open a position is then refused
+// with the token already spent; an order whose every leg closes is sent with a
+// warning, because the broker still enforces frozen accounts and its limits and
+// closing a position must stay possible while these reads are down.
+// ---------------------------------------------------------------------------
+
+/** The two account reads, as the refusal names them. */
+type ProbeName = "position limits" | "trading status";
+
+/** Why an account read could not be used. */
+type ProbeFailure =
+  /** The read threw: transport, status, grant failure. */
+  | { kind: "threw"; cause: unknown }
+  /** The read outran ADVISORY_READ_BUDGET_MS. */
+  | { kind: "timeout" }
+  /** The answer was not an object fields can be read off. */
+  | { kind: "unreadable"; shape: string }
+  /** The answer did not carry this account's number. */
+  | { kind: "unnamed" }
+  /** A trading status with no JSON boolean for a flag the order needs. */
+  | { kind: "noflag"; flag: string }
+  /** A limits record naming this account with no ceiling for a leg's class. */
+  | { kind: "noceiling" };
+
+/** Shared closing sentence of every refusal hint. */
+const CLOSING_ORDERS_STILL_GO =
+  "An order whose every leg is Buy to Close or Sell to Close is not refused for this reason.";
+
+function probeFailureOf(e: unknown): ProbeFailure {
+  return e instanceof AdvisoryReadTimeout
+    ? { kind: "timeout" }
+    : { kind: "threw", cause: e };
+}
+
+/**
+ * Did a payload that was readable as an object name THIS account?
+ *
+ * Exact string equality on the `account-number` both spec objects carry. Absent,
+ * not a string, or another account's number all answer no: with a record that is
+ * not demonstrably this account's there is no evidence about it, and comparing
+ * an order to a neighbour's ceiling is the opposite of a check.
+ */
+function namesAccount(
+  payload: Record<string, unknown>,
+  accountNumber: string,
+): boolean {
+  const named: unknown = payload["account-number"];
+  return typeof named === "string" && named === accountNumber;
+}
+
+/** The HTTP status a cause carried, when it carried a real one. */
+function causeStatus(cause: unknown): number | undefined {
+  const status = adaptError(cause).upstream?.status;
+  return typeof status === "number" && status > 0 ? status : undefined;
+}
+
+/** The parenthesised reason in the refusal message. Never broker text. */
+function probeReason(failure: ProbeFailure): string {
+  switch (failure.kind) {
+    case "timeout":
+      return `no answer within ${ADVISORY_READ_BUDGET_MS}ms`;
+    case "unreadable":
+      return "the answer was not a readable record";
+    case "unnamed":
+      return "the answer did not name this account";
+    case "noflag":
+      return `the answer carried no true-or-false value for ${failure.flag}`;
+    case "noceiling":
+      return "the answer carried no usable ceiling for an instrument class this order trades";
+    case "threw": {
+      const status = causeStatus(failure.cause);
+      return status === undefined ? "no HTTP response" : `HTTP ${status}`;
+    }
+  }
+}
+
+/**
+ * What to tell the agent to do next. First match wins, and every hint ends with
+ * the closing-order sentence.
+ *
+ * A failed credential exchange and a failure of the read itself are not told
+ * apart. The API client's own finished ToolErrors (a proxy page answered 200, a
+ * local size or time bound, a transport timeout) carry the same codes as the
+ * OAuth client's grant failures, so the code cannot separate them, and a wrong
+ * label would send an operator to the credentials for a fault elsewhere. Every
+ * failure is reported as a failed read with the status it carried. A 403 on the
+ * read means this login may not read this account's records, which is not a
+ * reason to touch credentials.
+ */
+function probeHint(
+  name: ProbeName,
+  failure: ProbeFailure,
+  retryAfterMs: number | undefined,
+): string {
+  const what =
+    name === "position limits" ? "position limits" : "trading status";
+  if (failure.kind === "noflag") {
+    return (
+      `This account's trading status record carried no true-or-false value for ` +
+      `${failure.flag}, so that restriction cannot be read and this is not a ` +
+      `transient failure. A new dry-run will not change it until the record does. ` +
+      `${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  if (failure.kind === "noceiling") {
+    return (
+      `This account's position limits record carried no usable order-size ceiling ` +
+      `for an instrument class this order trades, so the order cannot be checked ` +
+      `against one and this is not a transient failure. A new dry-run will not ` +
+      `change it until the record does. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  if (failure.kind === "unreadable" || failure.kind === "unnamed") {
+    return (
+      `The answer was not this account's ${what} record, so this is not a transient ` +
+      `failure. Check TASTYTRADE_API_URL and anything in front of it. ` +
+      CLOSING_ORDERS_STILL_GO
+    );
+  }
+  const twin = "run the matching dry_run_* tool again";
+  if (failure.kind === "timeout") {
+    return (
+      `The read did not finish in time, which is usually transient: ${twin} ` +
+      `later for a fresh token. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  const cause = failure.cause;
+  const adapted = adaptError(cause);
+  if (adapted.retryable) {
+    const wait = retryAfterMs === undefined ? "" : ` (after ${retryAfterMs}ms)`;
+    return (
+      `The read failed in a way that is usually transient: ${twin} later${wait} ` +
+      `for a fresh token. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  const status = causeStatus(cause);
+  const responseStatus = isToolErrorException(cause)
+    ? undefined
+    : (cause as { response?: { status?: number } } | null)?.response?.status;
+  if (responseStatus === 403) {
+    return (
+      `tastytrade refused this login's read of the account's ${what}. This login ` +
+      `may not be allowed to read this account's records: check that ` +
+      `account_number is one this login holds. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  if (adapted.code === "auth_failed") {
+    const own = adapted.hint ? `${adapted.hint} ` : "";
+    return (
+      `${own}Once that is fixed, ${twin} for a fresh token. ` +
+      CLOSING_ORDERS_STILL_GO
+    );
+  }
+  if (adapted.code === "not_found") {
+    return (
+      `tastytrade has no ${what} record for this account, so it cannot be ` +
+      `checked or placed through this server. A new dry-run will not change ` +
+      `that. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  if (status !== undefined) {
+    return (
+      `tastytrade answered the read with HTTP ${status}. Retrying is unlikely ` +
+      `to help until the cause clears. ${CLOSING_ORDERS_STILL_GO}`
+    );
+  }
+  return (
+    `The read failed before tastytrade answered. Check the network path to ` +
+    `TASTYTRADE_API_URL, then ${twin}. ${CLOSING_ORDERS_STILL_GO}`
+  );
+}
+
+/**
+ * The refusal for an order that might open a position when an account read
+ * failed. `retryable: false` because the token is spent: repeating this call
+ * cannot work, a new dry-run is what is needed. `upstream` carries the status
+ * only, never the body, and nothing here echoes the account number.
+ */
+function probeRefusal(
+  name: ProbeName,
+  failure: ProbeFailure,
+): ToolErrorException {
+  const cause =
+    failure.kind === "threw" ? adaptError(failure.cause) : undefined;
+  const retryAfterMs = cause?.retry_after_ms;
+  const status =
+    failure.kind === "threw" ? causeStatus(failure.cause) : undefined;
+  return toolError({
+    code: "sanity_check_failed",
+    message:
+      `Could not read the account's ${name} (${probeReason(failure)}), and this ` +
+      `order might open a position, so it was not sent. The confirmation token ` +
+      `was spent before the request went out.`,
+    retryable: false,
+    ...(retryAfterMs === undefined ? {} : { retry_after_ms: retryAfterMs }),
+    ...(status === undefined ? {} : { upstream: { status } }),
+    hint: probeHint(name, failure, retryAfterMs),
+  });
+}
+
 /**
  * The account-state checks, for EVERY path that spends a confirmation token.
  *
@@ -1145,11 +1393,14 @@ function collectDryRunWarnings(
  * needs no legs at all, and is a hard block rather than an advisory — so the
  * argument about a legless body does not apply to it.
  *
- * `legs` is therefore optional, and its absence changes exactly one outcome: the
+ * `legs` is therefore optional, and its absence changes two outcomes. The
  * closing-only gate cannot be evaluated, so the flag is reported as a warning and
- * `account_closing_only` disclosed as not-run. Everything else is identical on
- * both kinds of route, because one implementation is what makes the block
- * unbranchable.
+ * `account_closing_only` disclosed as not-run. And with no legs there is nothing
+ * to show the change only closes, so a trading status that cannot be read, does
+ * not name the account or lacks a boolean for a flag the route depends on
+ * refuses the route, as it does an order
+ * with an opening leg. Everything else is identical on both kinds of route,
+ * because one implementation is what makes the block unbranchable.
  *
  * One broker call, and the only one added to the legless routes. The
  * position-limit GET stays absent: it would fetch ceilings nothing could be
@@ -1157,7 +1408,7 @@ function collectDryRunWarnings(
  *
  * Charged as a DEBT that cannot refuse — an exhausted bucket must not abandon a
  * submit whose token has already been consumed — and bounded by the advisory
- * budget, so a slow status read degrades to a disclosed warning.
+ * budget, so a slow status read counts as a failed one.
  */
 export async function runAccountStateChecks(
   client: TastytradeClient,
@@ -1174,14 +1425,17 @@ export async function runAccountStateChecks(
   // happens, but a tool's pre-flight bills the tool's own bucket, not this one. Charged here so the ceiling governs it:
   // an unbilled request is a request the limiter does not know about.
   chargeUpstreamCallDebt({ rateKey: "trading_status" });
+  const mayOpen = mayOpenAny(legs);
   let rawStatus: unknown;
   try {
     rawStatus = await withAdvisoryBudget(
       client.getAccountStatus(accountNumber),
     );
   } catch (e) {
+    const failure = probeFailureOf(e);
+    if (mayOpen) throw probeRefusal("trading status", failure);
     warnings.push(
-      e instanceof AdvisoryReadTimeout
+      failure.kind === "timeout"
         ? `Account trading status did not answer within ${ADVISORY_READ_BUDGET_MS}ms, ` +
             `so the submit went ahead without it — ${STATUS_BACKSTOP}`
         : `Could not fetch account trading status — ${STATUS_BACKSTOP}`,
@@ -1190,16 +1444,18 @@ export async function runAccountStateChecks(
   }
 
   if (!isReadablePayload(rawStatus)) {
-    // Fetched, but not something fields can be read off — exactly the treatment
-    // the position-limit half above gets, and it matters most here, on the one
-    // pair of checks that HARD BLOCK. A 200 `{"data": null}` — a shape the strict
-    // envelope deliberately admits — resolves to null, so a bare `if (status)`
-    // would skip the frozen and closing-only blocks with an empty warning list.
-    // `{data: []}`, `{data: "frozen"}` and `{data: 5}` are worse still: truthy,
-    // so every field read comes back undefined and the account reports healthy.
-    // The throwing path warns and so does this one; the module header admits no
-    // asymmetry between them — the caller is ALWAYS told which checks did not
-    // run.
+    // Fetched, but not something fields can be read off. `{"data": null}` — a
+    // shape the strict envelope deliberately admits — resolves to null, and
+    // `{data: []}`, `{data: "frozen"}` and `{data: 5}` are truthy with every
+    // field read undefined, so each would report a healthy account with an empty
+    // warning list. An order that might open is refused; one that only closes
+    // is told which checks did not run.
+    if (mayOpen) {
+      throw probeRefusal("trading status", {
+        kind: "unreadable",
+        shape: describeUnreadablePayload(rawStatus),
+      });
+    }
     warnings.push(
       `Account trading status came back ${describeUnreadablePayload(rawStatus)}, ` +
         `so the ${ACCOUNT_STATE_CHECKS} checks did not run — ${STATUS_BACKSTOP}`,
@@ -1209,33 +1465,55 @@ export async function runAccountStateChecks(
 
   const status = rawStatus as TradingStatus;
 
-  // An object, and still no evidence any account-state check ran.
-  //
-  // The shape guard above is one level short: `{}` is a readable object, so every
-  // flag below reads undefined, every `if` is false, and the account reports healthy
-  // with an EMPTY warning list. Same for a body of nulls and for an envelope skew
-  // nesting the real status one level down as `{"trading-status": {"is-frozen":
-  // true}}` — an actually-frozen account sailing through the HARD BLOCK reporting
-  // nothing.
-  //
-  // Not an exotic shape: the vendored spec says only fields relevant to the
-  // account's current configuration are returned (account-status.md), so a payload
-  // missing flags is documented behaviour, and one missing ALL of them is what a
-  // version skew or a proxy rewrite looks like from here.
-  //
-  // The checks still run underneath this warning rather than being skipped by it. A
-  // guard that decides for itself that a check is pointless is how a check stops
-  // running for a reason nobody rechecks. The disclosure says instead that none of
-  // the four was EVALUATED.
-  const flagsReadable = readsAnyAccountStateFlag(status);
-  if (!flagsReadable) {
+  // A record that does not name this account says nothing about it. Absent
+  // `account-number` and another account's number are the same failure, and the
+  // flags on such a record are never applied to this order.
+  if (!namesAccount(status, accountNumber)) {
+    if (mayOpen) throw probeRefusal("trading status", { kind: "unnamed" });
     warnings.push(
-      `Account trading status carried no readable ${ACCOUNT_STATE_CHECKS}, ` +
-        `so those checks did not run — ${STATUS_BACKSTOP}`,
+      `Account trading status did not name this account, so the ` +
+        `${ACCOUNT_STATE_CHECKS} checks did not run — ${STATUS_BACKSTOP}`,
     );
+    return done();
   }
 
-  if (flagsReadable) ran.add("account_frozen");
+  // An object naming this account is still not evidence the checks can run.
+  //
+  // `{}` is a readable object, so every flag below would read undefined, every
+  // `if` would be false, and the account would report healthy with an EMPTY
+  // warning list. So would a body of nulls, a body whose flags are `0` or `""`,
+  // and an envelope skew nesting the real status one level down as
+  // `{"trading-status": {"is-frozen": true}}`. Only a JSON boolean is a reading.
+  //
+  // The vendored spec says only fields relevant to the account's current
+  // configuration are returned, so a record missing a flag is possible for a
+  // healthy account. An order that might open a position is refused when any of
+  // the three flags it depends on (REQUIRED_STATUS_FLAGS) is not a boolean,
+  // because a restriction that cannot be read is not one that is absent; that
+  // refusal comes after the frozen and closing-only blocks below, so a record
+  // that does say "frozen" is refused for that rather than for what it omits.
+  // An order that only closes goes ahead with a warning naming what did not
+  // run, and each check is recorded as run only when its own flag was a boolean.
+  if (!mayOpen) {
+    if (!ACCOUNT_STATE_FLAGS.some((flag) => isBooleanFlag(status, flag))) {
+      warnings.push(
+        `Account trading status carried no readable ${ACCOUNT_STATE_CHECKS}, ` +
+          `so those checks did not run — ${STATUS_BACKSTOP}`,
+      );
+    } else {
+      const unread = REQUIRED_STATUS_FLAGS.filter(
+        (flag) => !isBooleanFlag(status, flag),
+      );
+      if (unread.length > 0) {
+        warnings.push(
+          `Account trading status carried no true-or-false value for ` +
+            `${unread.join(" / ")}, so those checks did not run — ${STATUS_BACKSTOP}`,
+        );
+      }
+    }
+  }
+
+  if (isBooleanFlag(status, "is-frozen")) ran.add("account_frozen");
   if (status["is-frozen"]) {
     throw toolError({
       code: "sanity_check_failed",
@@ -1255,7 +1533,9 @@ export async function runAccountStateChecks(
       );
     }
   } else {
-    if (flagsReadable) ran.add("account_closing_only");
+    if (isBooleanFlag(status, "is-closing-only")) {
+      ran.add("account_closing_only");
+    }
     if (status["is-closing-only"]) {
       const openingLegs = legs.filter(mayOpenPosition);
       if (openingLegs.length > 0) {
@@ -1277,11 +1557,25 @@ export async function runAccountStateChecks(
       warnings.push("Account is closing-only.");
     }
   }
-  if (flagsReadable) ran.add("account_margin_call");
+  if (mayOpen) {
+    const unreadable = REQUIRED_STATUS_FLAGS.find(
+      (flag) => !isBooleanFlag(status, flag),
+    );
+    if (unreadable !== undefined) {
+      throw probeRefusal("trading status", {
+        kind: "noflag",
+        flag: unreadable,
+      });
+    }
+  }
+  if (isBooleanFlag(status, "is-in-margin-call"))
+    ran.add("account_margin_call");
   if (status["is-in-margin-call"]) {
     warnings.push("Account is in margin call.");
   }
-  if (flagsReadable) ran.add("account_risk_reducing_only");
+  if (isBooleanFlag(status, "is-risk-reducing-only")) {
+    ran.add("account_risk_reducing_only");
+  }
   if (status["is-risk-reducing-only"]) {
     // A WARNING and deliberately not a block, unlike its closing-only neighbour,
     // because the two restrictions are not the same shape. "Closing-only" is
@@ -1540,42 +1834,56 @@ export async function runSanityChecks(
   // and the tool pre-flight only charged for one of them. Bill it here, as a
   // debt that cannot refuse — see chargeUpstreamCallDebt.
   chargeUpstreamCallDebt();
+  const mayOpen = mayOpenAny(legs);
   let rawLimits: unknown;
   let limitsFetched = false;
+  let limitsFailure: ProbeFailure | null = null;
   try {
     rawLimits = await withAdvisoryBudget(
       client.getPositionLimit(accountNumber),
     );
     limitsFetched = true;
   } catch (e) {
-    // Don't hard-fail if the position-limit endpoint is unreachable or slow;
-    // the API will still enforce server-side. Surface a warning so it's
-    // visible, and distinguish the two: "did not answer in time" is a fact
-    // about this server's own deadline, not about the endpoint being down, and
-    // an operator reading the warnings needs to be able to tell them apart.
-    warnings.push(
-      e instanceof AdvisoryReadTimeout
-        ? `Account position limits did not answer within ${ADVISORY_READ_BUDGET_MS}ms, ` +
-            `so the submit went ahead without them — ${SERVER_SIDE_BACKSTOP}`
-        : `Could not fetch account position limits — ${SERVER_SIDE_BACKSTOP}`,
-    );
+    limitsFailure = probeFailureOf(e);
+  }
+  // Fetched, but the answer has to be an object naming THIS account before any
+  // ceiling in it is applied. `{data: null}` maps straight to null, a 200 whose
+  // body is not the expected envelope yields undefined, and a record for another
+  // account carries ceilings that do not govern this one.
+  if (limitsFetched) {
+    if (!isReadablePayload(rawLimits)) {
+      limitsFailure = {
+        kind: "unreadable",
+        shape: describeUnreadablePayload(rawLimits),
+      };
+    } else if (!namesAccount(rawLimits, accountNumber)) {
+      limitsFailure = { kind: "unnamed" };
+    }
   }
 
-  if (limitsFetched && !isReadablePayload(rawLimits)) {
-    // Fetched, but not something fields can be read off — `{data: null}` from
-    // the API maps straight to null, and a 200 whose body is not the expected
-    // envelope yields undefined. Skipping the per-leg loop silently would make
-    // a response that checked nothing read like a successful check; the
-    // throwing path warns, and so does this. Same claim, same disclosure.
+  if (limitsFailure !== null) {
+    // An order that might open has no ceiling to be held to, so it is refused.
+    // One that only closes goes ahead with the warning: the broker still
+    // enforces its own limits, and this is not a reason to trap a position.
+    if (mayOpen) throw probeRefusal("position limits", limitsFailure);
     warnings.push(
-      `Account position limits came back ${describeUnreadablePayload(rawLimits)}, ` +
-        `so no per-leg order-size ceiling could be applied — ${SERVER_SIDE_BACKSTOP}`,
+      limitsFailure.kind === "timeout"
+        ? `Account position limits did not answer within ${ADVISORY_READ_BUDGET_MS}ms, ` +
+            `so the submit went ahead without them — ${SERVER_SIDE_BACKSTOP}`
+        : limitsFailure.kind === "threw"
+          ? `Could not fetch account position limits — ${SERVER_SIDE_BACKSTOP}`
+          : limitsFailure.kind === "unreadable"
+            ? `Account position limits came back ${limitsFailure.shape}, ` +
+              `so no per-leg order-size ceiling could be applied — ${SERVER_SIDE_BACKSTOP}`
+            : `Account position limits did not name this account, ` +
+              `so no per-leg order-size ceiling could be applied — ${SERVER_SIDE_BACKSTOP}`,
     );
-  } else if (limitsFetched) {
-    // Fetched AND readable, so the ceiling was applied to every leg the payload
-    // publishes one for. The per-type gaps below are reported individually; the
-    // check itself ran.
-    ran.add("per_leg_order_size");
+  } else {
+    // Fetched, readable and this account's, so the ceiling is applied to every
+    // leg the payload publishes one for. The check is recorded as run after
+    // the loop, and only when no leg was skipped for want of a ceiling: a closing
+    // leg whose class has no usable ceiling went unchecked, and
+    // `checks_not_run` is the authoritative list of that.
     const limits = rawLimits as PositionLimit;
     // Reported once per distinct gap rather than once per leg: a four-leg
     // order missing one ceiling is one fact, not four.
@@ -1601,6 +1909,13 @@ export async function runSanityChecks(
       }
       const limit = usableOrderSizeLimit(limits[field]);
       if (limit === null) {
+        // A record that names the account but publishes no ceiling for this
+        // leg's class leaves an opening leg with nothing to be held to, which
+        // is the same position as a failed read. A closing leg is only warned
+        // about, as a failed read is for an order that only closes.
+        if (mayOpenPosition(leg)) {
+          throw probeRefusal("position limits", { kind: "noceiling" });
+        }
         unusableFields.add(field);
         continue;
       }
@@ -1615,6 +1930,7 @@ export async function runSanityChecks(
       }
     }
 
+    if (unusableFields.size === 0) ran.add("per_leg_order_size");
     for (const field of unusableFields) {
       warnings.push(
         `Account position limits carry no usable "${field}", so the matching ` +

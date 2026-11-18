@@ -53,6 +53,7 @@ const TRADING_STATUS = /\/accounts\/[^/]+\/trading-status$/;
  * the "no evidence any check ran" case and comes with its own warning.
  */
 const HEALTHY_TRADING_STATUS = {
+  "account-number": ACCT,
   "is-frozen": false,
   "is-closing-only": false,
   "is-in-margin-call": false,
@@ -201,7 +202,11 @@ describe("the envelope scrubs a credential under any key spelling", () => {
 // ---------------------------------------------------------------------------
 
 describe("a leg quantity the order-size check cannot compare", () => {
-  const LIMITS = { "equity-order-size": 100, "equity-option-order-size": 10 };
+  const LIMITS = {
+    "account-number": ACCT,
+    "equity-order-size": 100,
+    "equity-option-order-size": 10,
+  };
 
   const DRY_RUN_BODY = {
     order: { status: "Received" },
@@ -718,8 +723,16 @@ describe("a complex-order component that is not an order object", () => {
         method: "POST",
         reply: { data: { id: 56544, status: "Received" } },
       },
-      { matcher: POSITION_LIMIT, method: "GET", reply: { data: {} } },
-      { matcher: TRADING_STATUS, method: "GET", reply: { data: {} } },
+      {
+        matcher: POSITION_LIMIT,
+        method: "GET",
+        reply: { data: { "account-number": ACCT } },
+      },
+      {
+        matcher: TRADING_STATUS,
+        method: "GET",
+        reply: { data: HEALTHY_TRADING_STATUS },
+      },
     ];
   }
 
@@ -946,7 +959,11 @@ describe("the notional cap is enforced on replace, edit and complex-edit", () =>
         method: "PATCH",
         reply: { data: { id: 3, status: "Received" } },
       },
-      { matcher: POSITION_LIMIT, method: "GET", reply: { data: {} } },
+      {
+        matcher: POSITION_LIMIT,
+        method: "GET",
+        reply: { data: { "account-number": ACCT } },
+      },
       // This read is now on the money path for these
       // three routes, so it answers with a real status rather than `{}`.
       {
@@ -1377,8 +1394,24 @@ describe("a submit the caller has stopped waiting for is not sent", () => {
 
   function allRoutes(): Route[] {
     return [
-      { matcher: POSITION_LIMIT, method: "GET", reply: { data: {} } },
-      { matcher: TRADING_STATUS, method: "GET", reply: { data: {} } },
+      {
+        matcher: POSITION_LIMIT,
+        method: "GET",
+        reply: {
+          data: {
+            "account-number": ACCT,
+            "equity-order-size": 1_000_000,
+            "equity-option-order-size": 1_000_000,
+            "future-order-size": 1_000_000,
+            "future-option-order-size": 1_000_000,
+          },
+        },
+      },
+      {
+        matcher: TRADING_STATUS,
+        method: "GET",
+        reply: { data: HEALTHY_TRADING_STATUS },
+      },
       { matcher: ORDER_DRY_RUN, method: "POST", reply: { data: DRY_RUN } },
       {
         matcher: ORDER_SUBMIT,
@@ -1582,7 +1615,7 @@ describe("a submit the caller has stopped waiting for is not sent", () => {
         {
           matcher: POSITION_LIMIT,
           method: "GET",
-          reply: { data: {}, delayMs: 250 },
+          reply: { data: { "account-number": ACCT }, delayMs: 250 },
         },
         ...allRoutes(),
       ],

@@ -51,12 +51,14 @@ const FROZEN_STATUS = {
   "is-risk-reducing-only": false,
 };
 const CLEAN_STATUS = {
+  "account-number": ACCT,
   "is-frozen": false,
   "is-closing-only": false,
   "is-in-margin-call": false,
   "is-risk-reducing-only": false,
 };
 const ALL_LIMITS = {
+  "account-number": ACCT,
   "equity-order-size": 1_000_000,
   "equity-option-order-size": 1_000_000,
   "future-order-size": 1_000_000,
@@ -306,7 +308,10 @@ describe("every route discloses the checks it did not run", () => {
     expect(res.checks_not_run).toEqual([]);
   });
 
-  it("discloses the account-state checks when the read fails", async () => {
+  it("refuses an edit, with no PATCH, when the trading-status read fails", async () => {
+    // The edit body carries no legs, so nothing shows the change only closes: a
+    // trading status that cannot be read refuses it, as it does an order with an
+    // opening leg. The token was spent before the read, and the envelope says so.
     h = await createHarness({
       routes: [
         {
@@ -323,18 +328,16 @@ describe("every route discloses the checks it did not run", () => {
       "tastytrade_edit_order",
       EDIT_ARGS,
     );
-    const res = (await callOk(h, "tastytrade_edit_order", {
+    const err = await callError(h, "tastytrade_edit_order", {
       ...EDIT_ARGS,
       confirmation_token: token,
-    })) as { checks_not_run?: unknown; sanity_warnings?: unknown };
+    });
 
-    const notRun = res.checks_not_run as string[];
-    expect(notRun).toContain("account_frozen");
-    expect(notRun).toContain("account_margin_call");
-    // And the prose channel still says what happened, as it did before.
-    expect(
-      (res.sanity_warnings as string[]).some((w) => /trading status/i.test(w)),
-    ).toBe(true);
+    expect(err.code).toBe("sanity_check_failed");
+    expect(err.retryable).toBe(false);
+    expect(err.message).toMatch(/trading status/);
+    expect(err.message).toMatch(/was not sent/);
+    expect(wire(h)).not.toContain(`PATCH /accounts/${ACCT}/orders/${ORDER_ID}`);
   });
 });
 
@@ -422,30 +425,66 @@ describe("runAccountStateChecks", () => {
     expect(String((thrown as Error).message)).toMatch(/closing-only/i);
   });
 
-  it("warns and reports nothing run on an unreadable payload", async () => {
+  const closingLeg = [{ ...openingLeg[0], action: "Sell to Close" }];
+
+  it("warns and reports nothing run on an unreadable payload when every leg closes", async () => {
     if (!runAccountStateChecks) throw new Error("not exported");
-    const res = await runAccountStateChecks(clientWith(null), ACCT, undefined);
+    const res = await runAccountStateChecks(clientWith(null), ACCT, closingLeg);
     expect(res.warnings.some((w) => /trading status/i.test(w))).toBe(true);
     expect(res.ran).toEqual([]);
   });
 
-  it("warns and reports nothing run on an object carrying no flags", async () => {
+  it("warns and reports nothing run on an object carrying no flags when every leg closes", async () => {
     if (!runAccountStateChecks) throw new Error("not exported");
-    const res = await runAccountStateChecks(clientWith({}), ACCT, undefined);
+    const res = await runAccountStateChecks(
+      clientWith({ "account-number": ACCT }),
+      ACCT,
+      closingLeg,
+    );
     expect(res.warnings.some((w) => /did not run/i.test(w))).toBe(true);
     expect(res.ran).toEqual([]);
   });
 
-  it("warns and reports nothing run when the endpoint is down", async () => {
+  it("warns and reports nothing run when the endpoint is down and every leg closes", async () => {
     if (!runAccountStateChecks) throw new Error("not exported");
     const res = await runAccountStateChecks(
       clientWith(CLEAN_STATUS, true),
       ACCT,
-      undefined,
+      closingLeg,
     );
     expect(res.warnings.some((w) => /trading status/i.test(w))).toBe(true);
     expect(res.ran).toEqual([]);
   });
+
+  it.each([
+    ["is down", () => clientWith(CLEAN_STATUS, true)],
+    ["answers null", () => clientWith(null)],
+    ["answers an empty object", () => clientWith({})],
+    [
+      "answers with another account's record",
+      () => clientWith({ ...CLEAN_STATUS, "account-number": "5WX99999" }),
+    ],
+    [
+      "answers with no flag",
+      () => clientWith({ "account-number": ACCT, "is-frozen": null }),
+    ],
+  ])(
+    "refuses, rather than warns, when the endpoint %s and the legs might open",
+    async (_label, make) => {
+      if (!runAccountStateChecks) throw new Error("not exported");
+      for (const legs of [undefined, [], openingLeg]) {
+        let thrown: unknown;
+        try {
+          await runAccountStateChecks(make(), ACCT, legs);
+        } catch (e) {
+          thrown = e;
+        }
+        expect(isToolErrorException(thrown)).toBe(true);
+        const err = (thrown as { toolError: { code: string } }).toolError;
+        expect(err.code).toBe("sanity_check_failed");
+      }
+    },
+  );
 });
 
 // ===========================================================================
