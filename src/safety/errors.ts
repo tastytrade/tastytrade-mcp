@@ -51,6 +51,13 @@ export const TOOL_ERROR_CODES = [
    * once, from scratch, because the consumed confirmation token is gone.
    */
   "request_cancelled",
+  /**
+   * A READ tool's result, or a resource read, was larger than one result may be, so
+   * it was not returned. The read itself succeeded and changed nothing; the hint
+   * names a narrower call. Never produced for a write or destructive tool, whose
+   * change has already happened by the time its result is measured.
+   */
+  "result_too_large",
   "upstream_error",
   "network",
 ] as const;

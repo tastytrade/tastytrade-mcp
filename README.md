@@ -352,7 +352,10 @@ The reason this project exists. In order of how much they protect you:
 5. **Bounded, attributed output.** Everything the broker wrote is nested under an
    `upstream` member and marked as untrusted external content, bounded in size
    and stripped of display-hostile codepoints, so it cannot impersonate this
-   server's own fields.
+   server's own fields. A read tool's result, and a resource read, is also
+   capped at 1 MiB in total: past that the call fails with `result_too_large` and
+   a hint naming a narrower call. Write and destructive results are never capped,
+   because the change has already happened by then.
 
 ### Order attribution
 

@@ -80,6 +80,7 @@ import {
 } from "../safety/bounded-text.js";
 import { consumeToken, issueToken } from "../safety/confirmation.js";
 import { PACKAGE_VERSION } from "../version.js";
+import { resourceCapRefusal, resultCapRefusal } from "./result-cap.js";
 // The closed map both surfaces on the /market-data/by-type instrument-type
 // dimension read. It lives beside `InstrumentType`, whose wire values it is
 // keyed on — see MARKET_DATA_TYPE_PARAMS for why one copy matters.
@@ -3145,12 +3146,14 @@ export const MCP_ERROR_INTERNAL = -32603;
 
 /**
  * The JSON-RPC code a `resources/read` failure reports, given the taxonomy code
- * the failure classified as. Only two of the nine map onto a JSON-RPC code with
+ * the failure classified as. Only three of the codes map onto a JSON-RPC code with
  * a defined meaning; the rest stay InternalError and rely on `data.code`.
  */
 function rpcCodeForResourceError(code: ToolError["code"]): number {
   if (code === "not_found") return MCP_ERROR_RESOURCE_NOT_FOUND;
-  if (code === "validation") return MCP_ERROR_INVALID_PARAMS;
+  if (code === "validation" || code === "result_too_large") {
+    return MCP_ERROR_INVALID_PARAMS;
+  }
   return MCP_ERROR_INTERNAL;
 }
 
@@ -3440,15 +3443,21 @@ export class TastytradeMCPServer {
           // wrote, so bounding them would clip the server's own documentation
           // for no gain.
           const boundedBody = boundedDeep(data, RESULT_BOUNDS);
+          const bodyText =
+            typeof boundedBody.value === "string"
+              ? boundedBody.value
+              : JSON.stringify(boundedBody.value, null, 2);
+          // The same size cap a read tool has, on the same bytes the client
+          // receives. Only this branch is measured: the static resources are
+          // compiled-in markdown of a fixed size.
+          const tooLarge = resourceCapRefusal(bodyText);
+          if (tooLarge) throw protocolError(MCP_ERROR_INVALID_PARAMS, tooLarge);
           return {
             contents: [
               {
                 uri,
                 mimeType: tmpl.template.mimeType,
-                text:
-                  typeof boundedBody.value === "string"
-                    ? boundedBody.value
-                    : JSON.stringify(boundedBody.value, null, 2),
+                text: bodyText,
               },
             ],
             _meta: {
@@ -3826,6 +3835,14 @@ export class TastytradeMCPServer {
           // once, inside boundResultContent, and its verdict travels here as
           // `firstIsJson`.
         }
+      }
+      // The size cap, on READ tools only, measured after the structured mirror is
+      // in place because both go on the wire. A write or destructive result is
+      // never refused here: the change has already happened, and an agent told
+      // that a call failed may repeat it.
+      if (result && !result.isError && accessClassFor(annotations) === "read") {
+        const refusal = resultCapRefusal(result, name);
+        if (refusal) throw toolError(refusal);
       }
       // The provenance marker goes on last, so the block it appends is not
       // itself parsed, bounded, or mirrored.
