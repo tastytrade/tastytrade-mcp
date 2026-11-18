@@ -347,7 +347,8 @@ The reason this project exists. In order of how much they protect you:
    status cannot be read, the answer is not that account's record, a limits
    record has no ceiling for an opening leg's instrument class (one of the four
    classes the API publishes a ceiling for; crypto and the other classes with
-   none are not refused), or a trading status does not carry a true or false
+   none are not refused, and neither is an opening Notional Market leg, which
+   carries no quantity to compare), or a trading status does not carry a true or false
    value for `is-frozen`, `is-closing-only` and `is-in-margin-call`, an order
    that might open a position is refused. Replace,
    edit and edit-complex requests carry no legs, so they are refused whenever
