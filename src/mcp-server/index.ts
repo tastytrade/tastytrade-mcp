@@ -3,6 +3,7 @@
  * Handles tool registration and request routing
  */
 
+import type { Readable, Writable } from "node:stream";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -80,6 +81,13 @@ import {
 } from "../safety/bounded-text.js";
 import { consumeToken, issueToken } from "../safety/confirmation.js";
 import { PACKAGE_VERSION } from "../version.js";
+import {
+  InFlight,
+  SHUTDOWN_ABORT_REASON,
+  installShutdownHandlers,
+  shuttingDownRefusal,
+} from "../shutdown.js";
+import type { DrainOutcome, ShutdownSignal } from "../shutdown.js";
 // The closed map both surfaces on the /market-data/by-type instrument-type
 // dimension read. It lives beside `InstrumentType`, whose wire values it is
 // keyed on — see MARKET_DATA_TYPE_PARAMS for why one copy matters.
@@ -505,6 +513,12 @@ export function validateComplexLegQuantities(
  * is irreducible, and api-client's unknown-outcome envelope is the right way to
  * describe a request already on the wire.
  *
+ * The same check covers the server being told to stop: `signal` combines the
+ * caller's with the shutdown signal, which is aborted with
+ * {@link SHUTDOWN_ABORT_REASON} to select the shutdown wording. On stdio a stop
+ * signal means the client is leaving, so an order it would never hear about is
+ * not started.
+ *
  * The CANCELS are deliberately not gated: refusing to cancel because the client
  * stopped listening leaves a working order live. A cancel reduces exposure and
  * cannot create an obligation, so when in doubt, send it.
@@ -514,6 +528,20 @@ function assertCallerStillWaiting(
   what: string,
 ): void {
   if (signal?.aborted !== true) return;
+  if (signal.reason === SHUTDOWN_ABORT_REASON) {
+    // Told to stop (SIGTERM / SIGINT) during the pre-submit checks.
+    throw toolError({
+      code: "request_cancelled",
+      message:
+        `This server began shutting down before ${what} was sent, so it was NOT sent ` +
+        `and no order was created or changed.`,
+      retryable: false,
+      hint:
+        "Nothing was dispatched, so there is nothing to reconcile. The confirmation " +
+        "token was consumed before this point and does not survive the restart: once " +
+        "the server is running again, run the matching dry_run_* tool and use the new token.",
+    });
+  }
   throw toolError({
     code: "request_cancelled",
     message:
@@ -3178,6 +3206,16 @@ function protocolError(rpcCode: number, err: ToolError): Error {
   });
 }
 
+/** What `run()` talks to; each member defaults to the real one. For tests. */
+export interface RunIo {
+  stdin?: Readable;
+  stdout?: Writable;
+  process?: {
+    on(signal: ShutdownSignal, listener: () => void): unknown;
+    exit(code: number): void;
+  };
+}
+
 export class TastytradeMCPServer {
   private server: Server;
   private client: TastytradeClient;
@@ -3202,6 +3240,17 @@ export class TastytradeMCPServer {
    * built here, and the transport change that would make it a publish blocker.
    */
   private readonly accountScope: AccountScope;
+  /**
+   * The tool calls that have started and not finished. Closed by
+   * {@link beginShutdown}, after which `dispatchToolCall` refuses every new call.
+   */
+  private readonly inFlight = new InFlight();
+  /**
+   * Aborted, with {@link SHUTDOWN_ABORT_REASON}, when shutdown begins. Handed to
+   * every call alongside the caller's own signal, so a submit that has not yet
+   * been sent is refused rather than started.
+   */
+  private readonly shutdownController = new AbortController();
 
   /**
    * @param config      Explicit configuration. Omit to read the environment.
@@ -3675,11 +3724,41 @@ export class TastytradeMCPServer {
    *
    *   annotation lookup → read-only gate → rate limit → argument-shape guard →
    *   account-scope gate → handleToolCall → structured-error adaptation.
+   *
+   * Admission comes before all of it. Once shutdown has begun a call is refused
+   * here, before any lookup, charge or account check, so a refused call costs
+   * nothing and sends nothing; a call already admitted runs to its end and is
+   * counted until it does.
    */
   private async dispatchToolCall(
     name: string,
     args: any,
     signal?: AbortSignal,
+  ): Promise<any> {
+    const release = this.inFlight.admit();
+    if (release === null) {
+      return sanitizedErrorResult(adaptError(toolError(shuttingDownRefusal())));
+    }
+    try {
+      return await this.runToolCall(
+        name,
+        args,
+        AbortSignal.any(
+          signal
+            ? [signal, this.shutdownController.signal]
+            : [this.shutdownController.signal],
+        ),
+      );
+    } finally {
+      release();
+    }
+  }
+
+  /** The pre-flight and dispatch for one admitted call. See {@link dispatchToolCall}. */
+  private async runToolCall(
+    name: string,
+    args: any,
+    signal: AbortSignal,
   ): Promise<any> {
     // lookupRegistered, not TOOL_ANNOTATIONS[name]: a bare index answers for
     // `toString` / `constructor` / `__proto__` with an Object.prototype member,
@@ -6296,18 +6375,55 @@ export class TastytradeMCPServer {
    * origin only: `apiUrl` may carry credentials in its userinfo, which
    * `apiEndpointForDisplay` strips.
    *
-   * NOT DONE HERE, DELIBERATELY: there is no SIGTERM/SIGINT handler and no per-order
-   * audit line. A signal handler worth having must decide what to do about an
-   * in-flight write, and a per-order record must decide where it is written and what
-   * happens when that fails, on a server whose one output channel is reserved for the
-   * protocol. So there is no audit trail and no local record that any order was
-   * placed; reconstructing what this server did means reading the account. That is a
-   * real limitation, not an oversight.
+   * On SIGTERM or SIGINT the server stops starting tool calls, lets the ones already
+   * running finish (bounded, see `SHUTDOWN_DRAIN_MS`), closes the transport and
+   * exits; see src/shutdown.ts. The handlers are installed here, after `connect`,
+   * and not in `connect()`, which a test or an embedding host calls and which must
+   * not touch the process.
+   *
+   * NOT DONE HERE, DELIBERATELY: there is no per-order audit line. A per-order
+   * record must decide where it is written and what happens when that fails, on a
+   * server whose one output channel is reserved for the protocol. So there is no
+   * audit trail and no local record that any order was placed; reconstructing what
+   * this server did means reading the account. That is a real limitation, not an
+   * oversight.
+   *
+   * `io` replaces the streams and the process, for tests. Omit it in production.
    */
-  async run() {
-    const transport = new StdioServerTransport();
+  async run(io: RunIo = {}) {
+    const transport = new StdioServerTransport(io.stdin, io.stdout);
     await this.server.connect(transport);
     console.error(startupBanner(this.apiEndpointLabel, this.readOnlyMode));
+    const proc = io.process ?? {
+      on: (signal: ShutdownSignal, listener: () => void) =>
+        process.on(signal, listener),
+      exit: (code: number) => process.exit(code),
+    };
+    installShutdownHandlers(this, {
+      on: (signal, listener) => proc.on(signal, listener),
+      exit: (code) => proc.exit(code),
+      log: (line) => console.error(line),
+    });
+  }
+
+  /** Tool calls started and not yet finished. */
+  get running(): number {
+    return this.inFlight.running;
+  }
+
+  /**
+   * Stop starting tool calls, refuse any submit not yet sent, and wait up to `ms`
+   * for the calls already running. A request already on the wire is not
+   * interrupted: cutting it off would leave its outcome unknown.
+   */
+  beginShutdown(ms: number): Promise<DrainOutcome> {
+    this.shutdownController.abort(SHUTDOWN_ABORT_REASON);
+    return this.inFlight.drain(ms);
+  }
+
+  /** Close the protocol connection. */
+  async close(): Promise<void> {
+    await this.server.close();
   }
 
   /**

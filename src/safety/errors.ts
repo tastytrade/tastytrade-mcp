@@ -49,6 +49,10 @@ export const TOOL_ERROR_CODES = [
    * others cannot: nothing was dispatched. An agent that does see it — the
    * common case is that nobody is left to read it — may re-dry-run and submit
    * once, from scratch, because the consumed confirmation token is gone.
+   *
+   * Also the answer to a call that arrives, or has not yet sent its order, once
+   * the server has been told to stop (SIGTERM or SIGINT): the server declined to
+   * start it, and nothing was dispatched.
    */
   "request_cancelled",
   "upstream_error",

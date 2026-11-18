@@ -354,6 +354,12 @@ The reason this project exists. In order of how much they protect you:
    and stripped of display-hostile codepoints, so it cannot impersonate this
    server's own fields.
 
+On SIGTERM or SIGINT the server starts no new tool call (it answers
+`request_cancelled` and sends nothing), refuses a submit that has not yet gone
+out, lets the calls already running finish for up to 30 seconds, then exits. A
+second signal exits at once. A confirmation token does not survive a restart, so
+run the matching `dry_run_*` tool again after one.
+
 ### Order attribution
 
 Every order this server submits is tagged, server-side, with `source`, a field
