@@ -225,7 +225,7 @@ describe("every tool-result emission point routes through the guard", () => {
   function handleToolCallRegion(): [number, number] {
     const start = SOURCE.indexOf("private async handleToolCall(");
     expect(start).toBeGreaterThan(-1);
-    const end = SOURCE.indexOf("\n  async run()", start);
+    const end = SOURCE.indexOf("\n  async run(", start);
     expect(end).toBeGreaterThan(start);
     return [start, end];
   }
