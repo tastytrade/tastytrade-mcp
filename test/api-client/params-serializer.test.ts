@@ -299,18 +299,23 @@ const PINNED: ReadonlyArray<
       c.searchOrders("5WX00001", {
         "status[]": ["Filled", "Live"],
         "per-page": 25,
+        "start-date": "2026-08-01",
       }),
-    "status%5B%5D=Filled&status%5B%5D=Live&per-page=25",
+    "status%5B%5D=Filled&status%5B%5D=Live&per-page=25&start-date=2026-08-01",
   ],
   [
     "searchCustomerOrders",
-    (c) => c.searchCustomerOrders("me", { "status[]": ["Filled"] }),
-    "status%5B%5D=Filled",
+    (c) =>
+      c.searchCustomerOrders("me", {
+        "status[]": ["Filled"],
+        "start-date": "2026-08-01",
+      }),
+    "status%5B%5D=Filled&start-date=2026-08-01",
   ],
   [
     "getCustomerLiveOrders",
     (c) => c.getCustomerLiveOrders("me", { "status[]": ["Live"] }),
-    "status%5B%5D=Live",
+    "status%5B%5D=Live&per-page=200&page-offset=0",
   ],
   [
     "getInstruments",

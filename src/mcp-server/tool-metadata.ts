@@ -2394,7 +2394,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       account_number:
         "The tastytrade account number to search orders for (e.g. '5WX34382'). Required.",
       start_date:
-        "Lower bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than start_at; use one or the other.",
+        "Lower bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than start_at; use one or the other. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date:
         "Upper bound on order date (inclusive), formatted YYYY-MM-DD. Coarser than end_at.",
       start_at:
@@ -2402,7 +2402,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       end_at:
         "Upper bound on order time (inclusive) as a full ISO 8601 date-time. Higher precision than end_date.",
       status:
-        "Filter to one or more order statuses; sent as repeated status[]= query params. Any of Received, Routed, In Flight, Live, Contingent, Filled, Cancelled, Expired, Rejected, Remove Pending, Dead.",
+        "Filter to one or more order statuses; sent as repeated status[]= query params. Any of Received, Routed, In Flight, Live, Contingent, Filled, Cancelled, Expired, Rejected, Remove Pending, Dead. Searches cover a date window (see start_date), so a working GTC order not updated within it is missed; for working orders use tastytrade_get_live_orders.",
       underlying_symbol:
         "Filter by underlying symbol, e.g. 'AAPL'. Matches both the equity and its options.",
       underlying_instrument_type:
@@ -2639,12 +2639,13 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
     paramDescriptions: {
       account_number:
         "The tastytrade account number to search orders for. Required.",
-      start_date: "Lower bound on order date (inclusive), YYYY-MM-DD.",
+      start_date:
+        "Lower bound on order date (inclusive), YYYY-MM-DD. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date: "Upper bound on order date (inclusive), YYYY-MM-DD.",
       start_at: "Lower bound on order time (inclusive), ISO 8601 date-time.",
       end_at: "Upper bound on order time (inclusive), ISO 8601 date-time.",
       status:
-        "Filter to one or more statuses; sent as repeated status[]= params.",
+        "Filter to one or more statuses; sent as repeated status[]= params. Searches cover a date window (see start_date), so a working GTC order not updated within it is missed; for working orders use tastytrade_get_live_orders.",
       underlying_symbol: "Filter by underlying symbol, e.g. 'AAPL'.",
       underlying_instrument_type:
         "Filter by underlying instrument type (Equity, Equity Option, Future, Future Option, Cryptocurrency).",
@@ -3899,7 +3900,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       account_numbers:
         "Optional array of tastytrade account numbers (e.g. ['5WX34382']) to restrict the search to specific accounts owned by the customer. Sent as repeated account-numbers[]= query params. Omit to search all of the customer's accounts.",
       start_date:
-        "Inclusive lower bound on order date as a calendar day (YYYY-MM-DD). Use start_at instead when instant-level precision is needed.",
+        "Inclusive lower bound on order date as a calendar day (YYYY-MM-DD). Use start_at instead when instant-level precision is needed. Defaults to 30 days before end_date/end_at (or today) when neither start_date nor start_at is given; pass an earlier date to reach older orders.",
       end_date:
         "Inclusive upper bound on order date as a calendar day (YYYY-MM-DD).",
       start_at:
@@ -3907,7 +3908,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
       end_at:
         "Inclusive upper bound on order time as an ISO 8601 date-time instant.",
       status:
-        "Optional array of order statuses to include. Sent as repeated status[]= query params. Any of: Received, Routed, In Flight, Live, Contingent, Filled, Cancelled, Expired, Rejected, Remove Pending, Dead.",
+        "Optional array of order statuses to include. Sent as repeated status[]= query params. Any of: Received, Routed, In Flight, Live, Contingent, Filled, Cancelled, Expired, Rejected, Remove Pending, Dead. Searches cover a date window (see start_date), so a working GTC order not updated within it is missed; for working orders use tastytrade_get_live_orders.",
       underlying_symbol:
         "Filter to orders on a single underlying symbol (e.g. 'AAPL'). Matches the order's underlying-symbol field.",
       underlying_instrument_type:
@@ -4198,7 +4199,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
   tastytrade_get_customer_live_orders: {
     title: "Get Customer Live Orders (Today, All Accounts)",
     description:
-      "Read-only: returns every order from the current trading day across the accounts you name, via GET /customers/me/orders/live. account_numbers is REQUIRED: the endpoint returns 400 (validation_error, domain account-numbers) without it — read the list from tastytrade_get_accounts first. The customer is always the one the configured credential belongs to; there is no customer_id argument. IMPORTANT: despite the name, 'live' means 'created or updated today, ANY status' — the result includes orders filled, cancelled, rejected, or expired today, plus older GTC orders that are still Live today; it is NOT a feed of only currently-working orders. To get only working orders, filter the returned array by status (Received, Routed, In Flight, Live, Contingent) or instead use tastytrade_search_customer_orders with the status filter. account_numbers is required, not optional: without it the endpoint refuses the request. Does NOT place, modify, or cancel any order and moves no money. DO NOT poll this endpoint for real-time updates: per tastytrade, repeated polling degrades platform performance and may result in throttling or suspension of API access; subscribe to the account streamer for live order updates instead. Returns a JSON array of Order objects with the same shape as tastytrade_search_customer_orders (id, account-number, status, order-type, time-in-force, price/price-effect as string-decimals, underlying-symbol, lifecycle timestamps received-at/live-at/terminal-at, cancellable/editable flags, legs[].fills). This endpoint accepts no date or pagination parameters, so the full same-day set is returned as one unpaginated array. Errors are returned as an isError:true ToolError with a stable `code` (e.g. auth_failed for an invalid session or inaccessible accounts, rate_limit_exceeded); branch on code, never on message text. PROVENANCE: every Order carries `source`, the identifier the originating application sent with the submit. Orders placed through this server carry `tastytrade-mcp/<version>`, so an order an agent placed is distinguishable from one entered by hand or by another integration. The API exposes no `source` query filter, so filter on it client-side after reading. `source` is the only provenance the read side carries.",
+      "Read-only: returns every order from the current trading day across the accounts you name, via GET /customers/me/orders/live. account_numbers is REQUIRED: the endpoint returns 400 (validation_error, domain account-numbers) without it — read the list from tastytrade_get_accounts first. The customer is always the one the configured credential belongs to; there is no customer_id argument. IMPORTANT: despite the name, 'live' means 'created or updated today, ANY status' — the result includes orders filled, cancelled, rejected, or expired today, plus older GTC orders that are still Live today; it is NOT a feed of only currently-working orders. To get only working orders, filter the returned array by status (Received, Routed, In Flight, Live, Contingent) or instead use tastytrade_search_customer_orders with the status filter. account_numbers is required, not optional: without it the endpoint refuses the request. Does NOT place, modify, or cancel any order and moves no money. DO NOT poll this endpoint for real-time updates: per tastytrade, repeated polling degrades platform performance and may result in throttling or suspension of API access; subscribe to the account streamer for live order updates instead. Returns a JSON array of Order objects with the same shape as tastytrade_search_customer_orders (id, account-number, status, order-type, time-in-force, price/price-effect as string-decimals, underlying-symbol, lifecycle timestamps received-at/live-at/terminal-at, cancellable/editable flags, legs[].fills). The endpoint takes no date parameters and pages its results; this server fetches every page and returns the full same-day set as one array. Errors are returned as an isError:true ToolError with a stable `code` (e.g. auth_failed for an invalid session or inaccessible accounts, rate_limit_exceeded); branch on code, never on message text. PROVENANCE: every Order carries `source`, the identifier the originating application sent with the submit. Orders placed through this server carry `tastytrade-mcp/<version>`, so an order an agent placed is distinguishable from one entered by hand or by another integration. The API exposes no `source` query filter, so filter on it client-side after reading. `source` is the only provenance the read side carries.",
     paramDescriptions: {
       account_numbers:
         "Optional array of tastytrade account numbers (e.g. ['5WX34382']) to restrict the result to specific accounts owned by the customer. Sent as repeated account-numbers[]= query params. Omit to include all of the customer's accounts.",
@@ -4211,7 +4212,7 @@ export const TOOL_METADATA: Record<string, ToolMeta> = {
           $schema: "https://json-schema.org/draft/2020-12/schema",
           type: "array",
           description:
-            "Array of Order objects created or updated in the current trading day across the customer's accounts, in ANY status (filled/cancelled/rejected today plus still-Live GTC orders). The underlying tastytrade endpoint returns {data:{items:[...]},context}; the MCP client unwraps to .data.data.items and returns just this array (no pagination is offered by this endpoint).",
+            "Array of Order objects created or updated in the current trading day across the customer's accounts, in ANY status (filled/cancelled/rejected today plus still-Live GTC orders). The underlying tastytrade endpoint returns {data:{items:[...]},context}; the MCP client unwraps to .data.data.items and returns just this array (this server walks every page, so the array is complete).",
           items: {
             type: "object",
             description:
